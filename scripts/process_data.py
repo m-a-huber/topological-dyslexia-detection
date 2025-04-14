@@ -73,6 +73,7 @@ def get_time_series_data(
 def process_fixation_reports(
     fixation_reports_dir: Path,
     out_dir: Path,
+    overwrite: bool = False,
 ) -> None:
     for sp_path in tqdm(
         sorted(fixation_reports_dir.glob("*.txt")),
@@ -80,15 +81,17 @@ def process_fixation_reports(
     ):
         id = sp_path.stem.split("_")[-1]
         out_file = out_dir / f"time_series_data_{id}.npy"
-        out_file.parent.mkdir(exist_ok=True, parents=True)
-        time_series_data = get_time_series_data(sp_path)
-        np.save(out_file, time_series_data)
+        if not out_file.is_file() or overwrite:
+            out_file.parent.mkdir(exist_ok=True, parents=True)
+            time_series_data = get_time_series_data(sp_path)
+            np.save(out_file, time_series_data)
     return
 
 
 def get_labels(
     participants_stats_path: Path,
     out_dir: Path,
+    overwrite: bool = False,
 ) -> None:
     df_participants = pl.read_csv(participants_stats_path).filter(
         pl.col("subj") != "P14"  # because fixation data from P14 is missing
@@ -98,9 +101,11 @@ def get_labels(
     )
     is_dyslexic = (df_participants["dyslexia"] == "yes").to_numpy()
     out_file_native = out_dir / "is_native.npy"
-    out_file_native.parent.mkdir(exist_ok=True, parents=True)
+    if not out_file_native.is_file() or overwrite:
+        out_file_native.parent.mkdir(exist_ok=True, parents=True)
+        np.save(out_file_native, is_native)
     out_file_dyslexic = out_dir / "is_dyslexic.npy"
-    out_file_dyslexic.parent.mkdir(exist_ok=True, parents=True)
-    np.save(out_file_native, is_native)
-    np.save(out_file_dyslexic, is_dyslexic)
+    if not out_file_dyslexic.is_file() or overwrite:
+        out_file_dyslexic.parent.mkdir(exist_ok=True, parents=True)
+        np.save(out_file_dyslexic, is_dyslexic)
     return
