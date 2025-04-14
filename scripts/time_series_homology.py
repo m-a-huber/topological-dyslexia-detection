@@ -6,12 +6,23 @@ from typing_extensions import Self
 
 
 class TimeSeriesHomology(TransformerMixin, BaseEstimator):
+    """Class implementing extended persistence of a time series.
+
+    Parameters:
+        homology_coeff_field (int, optional): The field coefficient over which
+            homology is computed. Must be a prime number less than or equal to
+            46337. Defaults to 11.
+        min_persistence (float, optional): The minimum persistence value to
+            take into account. Defaults to 0.0.
+    """
 
     def __init__(
         self,
-        **homology_kwargs
+        homology_coeff_field: int = 11,
+        min_persistence: float = 0.0,
     ):
-        self.__dict__.update(homology_kwargs)
+        self.homology_coeff_field = homology_coeff_field
+        self.min_persistence = min_persistence
 
     def fit(
         self,
@@ -42,7 +53,10 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
         _X = np.array(X, dtype=np.float64)
         st = self._get_simplex_tree(_X)
         st.extend_filtration()
-        dgms = st.extended_persistence(**self.__dict__)
+        dgms = st.extended_persistence(
+            self.homology_coeff_field,
+            self.min_persistence
+        )
         return [
             self._format_dgm(dgm)
             for dgm in dgms[:3]  # last dgm is always empty
@@ -83,7 +97,7 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
 
     def _format_dgm(
         self,
-        dgm: list[tuple[int, tuple[float, float]]]
+        dgm: list[tuple[int, tuple[float, float]]],
     ) -> list[npt.NDArray]:
         """Helper function to convert a persistence diagram given in the Gudhi
         format into the format suitable for plotting.
