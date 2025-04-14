@@ -1,6 +1,11 @@
 from pathlib import Path
 
-from scripts.process_fixation_reports import process_fixation_reports
+import numpy as np
+
+from scripts.process_data import (  # type: ignore
+    get_labels,
+    process_fixation_reports,
+)
 
 if __name__ == "__main__":
     fixation_reports_dir = Path("data/FixationReports")
@@ -8,8 +13,17 @@ if __name__ == "__main__":
     participants_stats_path = dataset_statistics_dir / Path(
         "participant_stats.csv"
     )
-    time_series_dir = Path("data/TimeSeriesData")
+    out_dir = Path("data/TimeSeriesData")
     process_fixation_reports(
         fixation_reports_dir,
-        time_series_dir
+        out_dir
     )
+    get_labels(
+        participants_stats_path,
+        out_dir / "labels",
+    )
+    n_time_series = len(sorted(out_dir.glob("*.npy")))
+    n_labels_native = len(np.load(out_dir / "labels" / "is_native.npy"))
+    n_labels_dyslexic = len(np.load(out_dir / "labels" / "is_dyslexic.npy"))
+    assert n_time_series == n_labels_native
+    assert n_time_series == n_labels_dyslexic
