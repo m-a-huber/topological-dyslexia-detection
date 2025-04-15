@@ -103,9 +103,9 @@ def get_labels(
     out_file_native = out_dir / "is_native.npy"
     if not out_file_native.is_file() or overwrite:
         out_file_native.parent.mkdir(exist_ok=True, parents=True)
-        np.save(out_file_native, is_native)
+        np.save(out_file_native, is_native.astype(int))
     out_file_dyslexic = out_dir / "is_dyslexic.npy"
     if not out_file_dyslexic.is_file() or overwrite:
         out_file_dyslexic.parent.mkdir(exist_ok=True, parents=True)
-        np.save(out_file_dyslexic, is_dyslexic)
+        np.save(out_file_dyslexic, is_dyslexic.astype(int))
     return
