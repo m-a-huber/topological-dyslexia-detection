@@ -19,7 +19,7 @@ def get_time_series_data(
 
     Returns:
         numpy.ndarray: NumPy-array of shape (n_fixations, 3) where each row
-            contains (x-coordinate, y-coordinate, start time) of a fixation.
+            contains (start time, x-coordinate, y-coordinate) of a fixation.
     """
     with open(sp_path, "r", encoding="utf-8-sig") as f_in:
         header_line = f_in.readline()
@@ -63,9 +63,9 @@ def get_time_series_data(
     )
     return df_sp.select(
         [
+            "CURRENT_FIX_START",
             "CURRENT_FIX_X",
             "CURRENT_FIX_Y",
-            "CURRENT_FIX_START",
         ]
     ).to_numpy()
 
