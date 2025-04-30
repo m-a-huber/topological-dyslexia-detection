@@ -33,12 +33,14 @@ class PersistenceImageProcessor(BaseEstimator, TransformerMixin):
         self.scaler = scaler
 
     def fit(self, X, y=None):
-        self.n_samples, self.n_images_per_sample = X.shape[:2]
+        n_samples = len(X)
         self._scaler_ = ListTransformer(self.scaler)
-        self._scaler_.fit(X.reshape(self.n_samples, -1, 1))
+        self._scaler_.fit(X.reshape(n_samples, -1, 1))
         return self
 
     def transform(self, X):
-        return self._scaler_.fit_transform(
-            X.reshape(self.n_samples, -1, 1)
-        ).reshape(self.n_samples, -1)
+        n_samples = len(X)
+        X_transformed = self._scaler_.fit_transform(
+            X.reshape(n_samples, -1, 1)
+        ).reshape(n_samples, -1)
+        return X_transformed
