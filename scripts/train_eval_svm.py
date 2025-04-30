@@ -82,24 +82,10 @@ def train_eval_svm(
             "time_series_homology__sigmoid_slope": [-0.5, -1, -1.5, -2],
             "persistence_imager__base_estimator__resolution": [(75, 75)],
             "persistence_imager__base_estimator__bandwidth": [0.01, 0.05, 0.1],
-            "svc__C": [0.1, 1, 10, 100],
-            "svc__gamma": [0.001, 0.01, 0.1, "scale", "auto"],
+            "svc__C": [0.1, 1, 10],
+            "svc__gamma": [0.01, 0.1, "scale", "auto"],
             "svc__kernel": ["linear", "rbf"],
         }
-        # cv = StratifiedKFold(
-        #     n_splits=2,
-        #     shuffle=True,
-        #     random_state=random_state,
-        # )
-        # param_grid = {
-        #     "time_series_homology__type": ["sigmoidal"],
-        #     "time_series_homology__sigmoid_slope": [-1],
-        #     "persistence_imager__base_estimator__resolution": [(75, 75)],
-        #     "persistence_imager__base_estimator__bandwidth": [0.1],
-        #     "svc__C": [1],
-        #     "svc__gamma": ["auto"],
-        #     "svc__kernel": ["linear"],
-        # }
         grid_search = GridSearchCV(
             estimator=pipeline,
             param_grid=param_grid,
