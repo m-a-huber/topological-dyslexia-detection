@@ -1,3 +1,5 @@
+from typing import Optional
+
 import gudhi as gd  # type: ignore
 import numpy as np
 import numpy.typing as npt
@@ -6,92 +8,150 @@ from typing_extensions import Self
 
 
 class TimeSeriesHomology(TransformerMixin, BaseEstimator):
-    """Class implementing extended persistence of a time series.
+    """Class implementing normal, sloped, sigmoidal and arctan persistence of
+    a time series.
 
     Parameters:
         homology_coeff_field (int, optional): The field coefficient over which
             homology is computed. Must be a prime number less than or equal to
-            46337. Defaults to 11.
+            46337. Defaults to `11`.
         min_persistence (float, optional): The minimum persistence value to
-            take into account. Defaults to 0.0.
+            take into account. Defaults to `0.0`.
+        drop_infinite_persistence (bool, optional): Defaults to `False`.
+        type (str, optional): Which type of filtration to use for time series.
+            Must be one of `"normal"`, `"sloped"`, `"sigmoidal"` and
+            `"arctan"`. Defaults to `"normal"`.
+        linear_slope (float, optional): Slope of line used to construct sloped
+            filtration. Ignored unless `type` is set to `"sloped"`.
+            Defaults to `1.0`.
+        sigmoid_slope (float, optional): Slope of sigmoid curve (at its unique
+            inflection point) used to construct sigmoidal filtration. That is,
+            the sweeping curve is sigma(x):=1/(1+exp(-4*sigmoid_slope*x)).
+            Ignored unless `type` is set to `"sigmoidal"`. Defaults to `1.0`.
+        arctan_slope (float, optional): Slope of arctan curve (at its unique
+            inflection point) used to construct sigmoidal filtration. That is,
+            the sweeping curve is tau(x):=arctan(pi*arctan_slope*x)/pi+0.5.
+            Ignored unless `type` is set to `"arctan"`. Defaults to `1.0`.
+        padding_factor (float, optional): Factor by which to pad min-max range
+            of values of time series to avoid infinite filtration values.
+            Ignored unless `"type"` is set to `"sigmoidal"` or `"arctan"`.
+            Defaults to `0.05`.
     """
 
     def __init__(
         self,
         homology_coeff_field: int = 11,
         min_persistence: float = 0.0,
+        drop_infinite_persistence: bool = False,
         type: str = "normal",
-        slope: float = 1.0,
-        sigmoid_factor: float = 1.0,
+        linear_slope: float = 1.0,
+        sigmoid_slope: float = 1.0,
+        arctan_slope: float = 1.0,
+        padding_factor: float = 0.05,
     ):
         self.homology_coeff_field = homology_coeff_field
         self.min_persistence = min_persistence
+        self.drop_infinite_persistence = drop_infinite_persistence
         self.type = type
-        self.slope = slope
-        self.sigmoid_factor = sigmoid_factor
+        self.linear_slope = linear_slope
+        self.sigmoid_slope = sigmoid_slope
+        self.arctan_slope = arctan_slope
+        self.padding_factor = padding_factor
 
     def fit(
         self,
         X: npt.NDArray,
+        y: Optional[None] = None,
     ) -> Self:
         return self
 
     def transform(
         self,
-        X: npt.NDArray | list,
-    ) -> list[npt.NDArray]:
-        """Computes extended persistent homology of a time series.
+        X: list[npt.NDArray],
+        y: Optional[None] = None,
+    ) -> list[list[npt.NDArray]]:
+        """Computes persistent homology of a collection of (possibly
+        multivariate) time series.
 
         Args:
-            X (npt.NDArray | list): Times series given as a NumPy array of
-                shape (n_time_steps, 2) or as a list that is convertible to a
-                NumPy-array of shape (n_time_steps, 2), where the second axis
-                contains (time, value)-pairs of the time series.
+            X (list[npt.NDArray]): A list of time series, each of which is
+                given as a NumPy-array of shape (n_time_steps, n_features),
+                where the last axis contains tuples of the form
+                (time, value_1, ..., value_n).
+            y (None, optional): Not used, present here for API consistency with
+                scikit-learn.
 
         Returns:
-            list[list[npt.NDArray]]: A list of three persistence diagrams. Each
-                persistence diagram is a list of NumPy-arrays of shape
-                `(n_generators, 2)`, where the i-th entry of the list is an
-                array containing the birth and death times of the homological
-                generators in dimension i-1. In particular, the list starts
-                with 0-dimensional homology and contains information from
-                consecutive homological dimensions.
+            list[list[npt.NDArray]]: A list containing a list of persistence
+                diagrams of each time series, one for each coordinate of the
+                value of the time series. Each persistence diagram is a
+                NumPy-array of shape `(n_generators, 2)` containing the birth
+                and death times of the homological generators in dimension 0.
         """
-        self.st_ = self._get_simplex_tree(X)
-        dgm = self.st_.persistence(
-            homology_coeff_field=self.homology_coeff_field,
-            min_persistence=self.min_persistence,
-            persistence_dim_max=True
-        )
-        return self._format_dgm(dgm)
+        self.simplex_tree_lists_ = [
+            [
+                self._get_simplex_tree(time_series[:, [0, coord]])
+                for coord in range(1, time_series.shape[1])
+            ]
+            for time_series in X
+        ]
+        dgm_lists = [
+            [
+                simplex_tree.persistence(
+                    homology_coeff_field=self.homology_coeff_field,
+                    min_persistence=self.min_persistence,
+                    persistence_dim_max=False
+                )
+                for simplex_tree in simplex_tree_list
+            ]
+            for simplex_tree_list in self.simplex_tree_lists_
+        ]
+        dgm_formatted_lists = [
+            [
+                self._format_dgm(dgm)[0]
+                for dgm in dgm_list
+            ]
+            for dgm_list in dgm_lists
+        ]
+        if self.drop_infinite_persistence:
+            dgm_formatted_lists = [
+                [
+                    dgm[np.isfinite(dgm).all(axis=1)]
+                    for dgm in dgm_formatted_list
+                ]
+                for dgm_formatted_list in dgm_formatted_lists
+            ]
+        return dgm_formatted_lists
 
     def _get_simplex_tree(
         self,
-        X: npt.NDArray | list,
+        time_series: npt.NDArray,
     ) -> gd.SimplexTree:
-        """Constructs simplex tree from time series data.
+        """Constructs simplex tree from a single  univariate time series.
 
         Args:
-            X (npt.NDArray | list): Times series given as a NumPy array of
-                shape (n_time_steps, 2) or as a list that is convertible to a
-                NumPy-array of shape (n_time_steps, 2), where the second axis
-                contains (time, value)-pairs of the time series.
+            time_series (npt.NDArray): Times series given as a NumPy-array of
+                shape (n_time_steps, 2), where the last axis contains
+                (time, value)-pairs of the time series.
 
         Returns:
             gudhi.Simplextree: Simplex tree encoding the sublevel set
                 filtration of the time series.
         """
-        X = np.array(X, dtype=np.float64)
+        time_series = np.array(time_series, dtype=np.float64)
         st = gd.SimplexTree()
-        vertex_array_vertices = np.arange(len(X)).reshape([1, -1])
-        filtrations_vertices = self._get_vertex_filtrations(X)
+        vertex_array_vertices = np.arange(len(time_series)).reshape([1, -1])
+        filtrations_vertices = self._get_vertex_filtrations(time_series)
+        filtrations_vertices = (
+            filtrations_vertices - np.min(filtrations_vertices)
+        )
         st.insert_batch(
             vertex_array=vertex_array_vertices,
             filtrations=filtrations_vertices
         )
         vertex_array_edges = np.array([
             [i, i + 1]
-            for i in range(len(X) - 1)
+            for i in range(len(time_series) - 1)
         ]).T
         filtrations_edges = np.maximum(
             filtrations_vertices[:-1],
@@ -103,52 +163,85 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
         )
         return st
 
-    def _get_vertex_filtrations(self, X):
+    def _get_vertex_filtrations(self, time_series):
         if self.type == "normal":
-            return X[:, 1]
-        if self.type == "sloped":
+            return time_series[:, 1]
+        elif self.type == "sloped":
+            x_range = np.ptp(
+                time_series,
+                axis=0
+            )[1]
             x_min = np.min(
-                X[:, 1]
+                time_series[:, 1]
             )
             x_max = np.max(
-                X[:, 1]
+                time_series[:, 1]
             )
             x_mid = 0.5 * (x_min + x_max)
 
             def _get_filtration(a):
                 # a is array of shape (2,) interpreted as containing t- and
                 # x-value of time series
-                return a[0] - (a[1] - x_mid) / self.slope
+                return a[0] - (a[1] - x_mid) / self.linear_slope
             return np.apply_along_axis(
                 func1d=_get_filtration,
                 axis=1,
-                arr=X
+                arr=time_series
             )
-        if self.type == "sigmoidal":
+        elif self.type == "sigmoidal":
+            x_range = np.ptp(
+                time_series,
+                axis=0
+            )[1]
             x_min = np.min(
-                X[:, 1]
-            )
+                time_series[:, 1]
+            ) - self.padding_factor * x_range
             x_max = np.max(
-                X[:, 1]
-            )
+                time_series[:, 1]
+            ) + self.padding_factor * x_range
 
             def _get_filtration(a):
                 # a is array of shape (2,) interpreted as containing t- and
                 # x-value of time series
-                if a[1] == x_min:
-                    return self.sigmoid_factor * np.inf
-                if a[1] == x_max:
-                    return -self.sigmoid_factor * np.inf
-                else:
-                    return (
-                        a[0]
-                        + np.log((x_max - a[1]) / (a[1] - x_min))
-                        / self.sigmoid_factor
-                    )
+                return (
+                    a[0]
+                    + np.log((x_max - a[1]) / (a[1] - x_min))
+                    / (4 * self.sigmoid_slope)
+                )
             return np.apply_along_axis(
                 func1d=_get_filtration,
                 axis=1,
-                arr=X
+                arr=time_series
+            )
+        elif self.type == "arctan":
+            x_range = np.ptp(
+                time_series,
+                axis=0
+            )[1]
+            x_min = np.min(
+                time_series[:, 1]
+            ) - self.padding_factor * x_range
+            x_max = np.max(
+                time_series[:, 1]
+            ) + self.padding_factor * x_range
+
+            def _get_filtration(a):
+                # a is array of shape (2,) interpreted as containing t- and
+                # x-value of time series
+                return (
+                    a[0]
+                    - np.tan(np.pi * ((a[1] - x_min) / (x_max - x_min) - 0.5))
+                    / (np.pi * self.arctan_slope)
+                )
+            return np.apply_along_axis(
+                func1d=_get_filtration,
+                axis=1,
+                arr=time_series
+            )
+        else:
+            raise ValueError(
+                "Got invalid value for `type`, must be one of `'normal'`, "
+                "`'sloped'`, `'sigmoidal'` and `'arctan'`"
             )
 
     def _format_dgm(
@@ -156,7 +249,7 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
         dgm: list[tuple[int, tuple[float, float]]],
     ) -> list[npt.NDArray]:
         """Helper function to convert a persistence diagram given in the Gudhi
-        format into the format suitable for plotting.
+        format into the format suitable for further processing and plotting.
 
         Args:
             dgm (list[tuple[int, tuple[float, float]]]): Persistence diagram
