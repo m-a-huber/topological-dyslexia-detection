@@ -59,6 +59,7 @@ def train_eval_svm(
     X_test: npt.NDArray,
     y_test: npt.NDArray,
     out_dir: Path,
+    n_splits: int,
     param_grid: dict,
     n_jobs: int | None,
     overwrite: bool,
@@ -82,7 +83,7 @@ def train_eval_svm(
             ("svc", SVC(class_weight="balanced"))
         ])
         cv = StratifiedKFold(
-            n_splits=5,
+            n_splits=n_splits,
             shuffle=True,
             random_state=random_state,
         )
@@ -159,6 +160,10 @@ if __name__ == "__main__":
         test_size=0.2,
         random_state=random_state,
     )
+    # Best params found by hand are [
+    #     "sigmoidal", -0.25, (75, 75), 0.1, 1, "auto", "linear"
+    # ] (in the order below)
+    n_splits = 5
     param_grid = {
         "time_series_homology__type": ["sigmoidal"],
         "time_series_homology__sigmoid_slope": [-0.125, -0.25, -0.375, -0.5],
@@ -176,6 +181,7 @@ if __name__ == "__main__":
             X_test=X_test,
             y_test=y_test,
             out_dir=out_dir,
+            n_splits=n_splits,
             param_grid=param_grid,
             n_jobs=n_jobs,
             overwrite=overwrite,
