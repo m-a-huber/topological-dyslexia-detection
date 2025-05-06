@@ -26,6 +26,7 @@ from scripts.time_series_homology import TimeSeriesHomology  # type: ignore
 from scripts.utils import (  # type: ignore
     ListTransformer,
     PersistenceImageProcessor,
+    PersistenceProcessor,
 )
 
 
@@ -50,7 +51,7 @@ def weight_abs1p(pt):
     """Custom weight function for persistence images that weighs points in a
     persistence diagram by lifetime plus 1.
     """
-    return pt[1] + 1
+    return np.abs(pt[1]) + 1
 
 
 def train_eval_svm(
@@ -59,6 +60,7 @@ def train_eval_svm(
     X_test: npt.NDArray,
     y_test: npt.NDArray,
     out_dir: Path,
+    use_extended_persistence: bool,
     n_splits: int,
     param_grid: dict,
     n_jobs: int | None,
@@ -74,8 +76,10 @@ def train_eval_svm(
         pipeline = Pipeline([
             ("time_series_scaler", TimeSeriesScaler),
             ("time_series_homology", TimeSeriesHomology(
-                drop_infinite_persistence=True
+                use_extended_persistence=use_extended_persistence,
+                drop_infinite_persistence=not use_extended_persistence,
             )),
+            ("persistence_processor", PersistenceProcessor()),
             ("persistence_imager", PersistenceImager),
             ("persistence_image_scaler", PersistenceImageProcessor(
                 scaler=MinMaxScaler()
@@ -150,6 +154,7 @@ if __name__ == "__main__":
     )
     # Create and train pipeline on extracted time series data
     out_dir = Path("out_files")
+    use_extended_persistence = False
     n_jobs = -1
     overwrite = False
     verbose = 2
@@ -181,6 +186,7 @@ if __name__ == "__main__":
             X_test=X_test,
             y_test=y_test,
             out_dir=out_dir,
+            use_extended_persistence=use_extended_persistence,
             n_splits=n_splits,
             param_grid=param_grid,
             n_jobs=n_jobs,
