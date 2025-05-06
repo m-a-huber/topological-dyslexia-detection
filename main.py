@@ -143,7 +143,8 @@ def train_eval_svm(
 
 
 if __name__ == "__main__":
-    filtration_type = sys.argv[1]
+    filtration_type = sys.argv[1]  # must be one of "normal", "sloped",
+    # "sigmoidal", and "arctan"
     use_extended_persistence = sys.argv[2] == "True"
     overwrite = sys.argv[3] == "True"
 
