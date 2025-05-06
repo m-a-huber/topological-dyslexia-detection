@@ -5,14 +5,9 @@ import gudhi.representations as gdrep  # type: ignore
 import joblib  # type: ignore
 import numpy as np
 import numpy.typing as npt
-from sklearn.metrics import (  # type: ignore
-    classification_report,
-    confusion_matrix,
-    roc_auc_score,
-)
 from sklearn.model_selection import (  # type: ignore
     StratifiedKFold,
-    train_test_split,
+    cross_val_score,
 )
 from sklearn.pipeline import Pipeline  # type: ignore
 from sklearn.preprocessing import MinMaxScaler, StandardScaler  # type: ignore
@@ -34,19 +29,14 @@ from scripts.utils import (  # type: ignore
 
 def get_data(
     time_series_dir: Path,
-    test_size: float,
-    random_state: int | None,
-) -> tuple[npt.NDArray, npt.NDArray, npt.NDArray, npt.NDArray]:
+) -> tuple[list[npt.NDArray], npt.NDArray]:
     X = [
         np.load(time_series_path)
         for time_series_path in sorted(time_series_dir.glob("*.npy"))
     ]
     y = np.load(time_series_dir / "labels" / "is_dyslexic.npy")
     assert len(X) == len(y)
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=test_size, stratify=y, random_state=random_state
-    )
-    return X_train, X_test, y_train, y_test
+    return X, y
 
 
 def weight_abs1p(pt):
@@ -57,10 +47,8 @@ def weight_abs1p(pt):
 
 
 def train_eval_svm(
-    X_train: npt.NDArray,
-    y_train: npt.NDArray,
-    X_test: npt.NDArray,
-    y_test: npt.NDArray,
+    X: list[npt.NDArray],
+    y: npt.NDArray,
     out_dir: Path,
     filtration_type: str,
     use_extended_persistence: bool,
@@ -71,7 +59,7 @@ def train_eval_svm(
     verbose: int,
     overwrite: bool,
     random_state: int | None,
-) -> tuple[dict, dict, dict, npt.NDArray, float]:
+) -> tuple[dict, dict, npt.NDArray]:
     if not out_dir.is_dir() or overwrite:
         TimeSeriesScaler = ListTransformer(base_estimator=StandardScaler())
         PersistenceImager = ListTransformer(gdrep.PersistenceImage(
@@ -107,39 +95,37 @@ def train_eval_svm(
             verbose=verbose,
             random_state=random_state,
         )
-        bayes_search.fit(X_train, y_train)
-        best_model = bayes_search.best_estimator_
-        y_pred = best_model.predict(X_test)
-        cv_results, best_params, clf_report, conf_matrix, roc_score = (
+        bayes_search.fit(X, y)
+        cv_results, best_params, cv_roc_scores = (
             bayes_search.cv_results_,
             bayes_search.best_params_,
-            classification_report(y_test, y_pred, output_dict=True),
-            confusion_matrix(y_test, y_pred),
-            roc_auc_score(y_test, best_model.decision_function(X_test)),
+            cross_val_score(
+                bayes_search.best_estimator_,
+                X,
+                y,
+                cv=cv,
+                scoring="roc_auc",
+            )
         )
         out_dir.mkdir(parents=True, exist_ok=True)
         joblib.dump(cv_results, out_dir / "cv_results.pkl")
         joblib.dump(best_params, out_dir / "best_params.pkl")
-        joblib.dump(clf_report, out_dir / "clf_report.pkl")
-        joblib.dump(conf_matrix, out_dir / "conf_matrix.pkl")
-        joblib.dump(roc_score, out_dir / "roc_score.pkl")
+        joblib.dump(cv_roc_scores, out_dir / "cv_roc_scores.pkl")
         if verbose:
             print(
-                "Saved `cv_results`, `best_params`, `clf_report`, "
-                f"`conf_matrix` and `roc_score` in {out_dir}."
+                "Saved `cv_results`, `best_params` and `cv_roc_scores` "
+                f"in {out_dir}."
             )
     else:
         cv_results = joblib.load(out_dir / "cv_results.pkl")
         best_params = joblib.load(out_dir / "best_params.pkl")
-        clf_report = joblib.load(out_dir / "clf_report.pkl")
-        conf_matrix = joblib.load(out_dir / "conf_matrix.pkl")
-        roc_score = joblib.load(out_dir / "roc_score.pkl")
+        cv_roc_scores = joblib.load(out_dir / "cv_roc_scores.pkl")
         if verbose:
             print(
-                "Found `cv_results`, `best_params`, `clf_report`, "
-                f"`conf_matrix` and `roc_score` in {out_dir}; not overwriting."
+                "Found `cv_results`, `best_params` and `cv_roc_scores` "
+                f"in {out_dir}; not overwriting."
             )
-    return cv_results, best_params, clf_report, conf_matrix, roc_score
+    return cv_results, best_params, cv_roc_scores
 
 
 if __name__ == "__main__":
@@ -175,10 +161,8 @@ if __name__ == "__main__":
     )
 
     # Load data
-    X_train, X_test, y_train, y_test = get_data(
+    X, y = get_data(
         time_series_dir=time_series_dir,
-        test_size=0.2,
-        random_state=random_state,
     )
 
     # Set parameter space for BayesSearchCV; best params found by hand are [
@@ -202,12 +186,10 @@ if __name__ == "__main__":
     out_dir = Path(
         f"out_files_{filtration_type}_{suffix}"
     )
-    cv_results, best_params, clf_report, conf_matrix, roc_score = (
+    cv_results, best_params, cv_roc_scores = (
         train_eval_svm(
-            X_train=X_train,
-            y_train=y_train,
-            X_test=X_test,
-            y_test=y_test,
+            X=X,
+            y=y,
             out_dir=out_dir,
             filtration_type=filtration_type,
             use_extended_persistence=use_extended_persistence,
@@ -222,9 +204,7 @@ if __name__ == "__main__":
     )
     print("Best Parameters:")
     print(best_params)
-    print("Classification Report:")
-    print(clf_report)
-    print("Confusion Matrix:")
-    print(conf_matrix)
-    print("ROC AUC Score:")
-    print(roc_score)
+    print("Cross-validated ROC AUC scores:")
+    print(cv_roc_scores)
+    print("Average ROC AUC scores:")
+    print(f"{cv_roc_scores.mean()} ± {cv_roc_scores.std()}")
