@@ -73,6 +73,7 @@ def get_time_series_data(
 def process_fixation_reports(
     fixation_reports_dir: Path,
     out_dir: Path,
+    verbose: bool,
     overwrite: bool = False,
 ) -> None:
     for sp_path in tqdm(
@@ -85,12 +86,23 @@ def process_fixation_reports(
             out_file.parent.mkdir(exist_ok=True, parents=True)
             time_series_data = get_time_series_data(sp_path)
             np.save(out_file, time_series_data)
+            if verbose:
+                tqdm.write(
+                    f"Saved processed fixation report to {out_dir}."
+                )
+        else:
+            if verbose:
+                tqdm.write(
+                    f"Found processed fixation report at {out_dir}; not "
+                    "overwriting."
+                )
     return
 
 
 def get_labels(
     participants_stats_path: Path,
     out_dir: Path,
+    verbose: bool,
     overwrite: bool = False,
 ) -> None:
     df_participants = pl.read_csv(participants_stats_path).filter(
@@ -104,8 +116,27 @@ def get_labels(
     if not out_file_native.is_file() or overwrite:
         out_file_native.parent.mkdir(exist_ok=True, parents=True)
         np.save(out_file_native, is_native.astype(int))
+        if verbose:
+            tqdm.write(
+                f"Saved native speaker labels to {out_file_native}."
+            )
+    else:
+        if verbose:
+            tqdm.write(
+                f"Found native speaker labels at {out_file_native}; not "
+                "overwriting."
+            )
     out_file_dyslexic = out_dir / "is_dyslexic.npy"
     if not out_file_dyslexic.is_file() or overwrite:
         out_file_dyslexic.parent.mkdir(exist_ok=True, parents=True)
         np.save(out_file_dyslexic, is_dyslexic.astype(int))
+        if verbose:
+            tqdm.write(
+                f"Saved dyslexia labels to {out_file_native}."
+            )
+    else:
+        if verbose:
+            tqdm.write(
+                f"Found dyslexia labels at {out_file_native}; not overwriting."
+            )
     return
