@@ -9,7 +9,7 @@ from typing_extensions import Self
 
 class TimeSeriesHomology(TransformerMixin, BaseEstimator):
     """Class implementing normal, sloped, sigmoidal and arctan persistence of
-    a time series.
+    (possibly multivariate) time series.
 
     Parameters:
         homology_coeff_field (int, optional): The field coefficient over which
@@ -17,7 +17,6 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
             46337. Defaults to `11`.
         min_persistence (float, optional): The minimum persistence value to
             take into account. Defaults to `0.0`.
-        drop_infinite_persistence (bool, optional): Defaults to `False`.
         type (str, optional): Which type of filtration to use for time series.
             Must be one of `"normal"`, `"sloped"`, `"sigmoidal"` and
             `"arctan"`. Defaults to `"normal"`.
@@ -36,27 +35,37 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
             of values of time series to avoid infinite filtration values.
             Ignored unless `"type"` is set to `"sigmoidal"` or `"arctan"`.
             Defaults to `0.05`.
+        use_extended_persistence (bool, optional): Whether or not to compute
+            extended persistence as opposed to ordinary persistence. Defaults
+            to `True`.
+        drop_infinite_persistence (bool, optional): Whether or not to drop
+            homological generators with infinite lifespan from the resulting
+            persistences. Ignored if `use_extended_persistence` is set to
+            `True`, since in that case all generators have finite lifespan.
+            Defaults to `False`.
     """
 
     def __init__(
         self,
         homology_coeff_field: int = 11,
         min_persistence: float = 0.0,
-        drop_infinite_persistence: bool = False,
         type: str = "normal",
         linear_slope: float = 1.0,
         sigmoid_slope: float = 1.0,
         arctan_slope: float = 1.0,
         padding_factor: float = 0.05,
+        use_extended_persistence: bool = True,
+        drop_infinite_persistence: bool = False,
     ):
         self.homology_coeff_field = homology_coeff_field
         self.min_persistence = min_persistence
-        self.drop_infinite_persistence = drop_infinite_persistence
         self.type = type
         self.linear_slope = linear_slope
         self.sigmoid_slope = sigmoid_slope
         self.arctan_slope = arctan_slope
         self.padding_factor = padding_factor
+        self.use_extended_persistence = use_extended_persistence
+        self.drop_infinite_persistence = drop_infinite_persistence
 
     def fit(
         self,
@@ -69,7 +78,7 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
         self,
         X: list[npt.NDArray],
         y: Optional[None] = None,
-    ) -> list[list[npt.NDArray]]:
+    ) -> list[list[list[list[npt.NDArray]]]]:
         """Computes persistent homology of a collection of (possibly
         multivariate) time series.
 
@@ -82,11 +91,19 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
                 scikit-learn.
 
         Returns:
-            list[list[npt.NDArray]]: A list containing a list of persistence
-                diagrams of each time series, one for each coordinate of the
-                value of the time series. Each persistence diagram is a
-                NumPy-array of shape `(n_generators, 2)` containing the birth
-                and death times of the homological generators in dimension 0.
+            list[list[list[list[npt.NDArray]]]]: A list containing a list of
+                lists of persistence diagrams of each time series, one for each
+                coordinate of the value of the time series. Each list of
+                persistence diagrams contains either three (if
+                `use_extended_persistence` is set to `True`) or one persistence
+                diagrams (otherwise). In the former case, the list contains the
+                ordinary, relative and essential diagram, in this order. Each
+                persistence diagram is given as a list of NumPy-arrays of shape
+                `(n_generators, 2)`, where the i-th entry of the list is an
+                array containing the birth and death times of the homological
+                generators in dimension i-1. In particular, the list starts
+                with 0-dimensional homology and contains information from
+                consecutive homological dimensions.
         """
         self.simplex_tree_lists_ = [
             [
@@ -95,33 +112,64 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
             ]
             for time_series in X
         ]
-        dgm_lists = [
-            [
-                simplex_tree.persistence(
-                    homology_coeff_field=self.homology_coeff_field,
-                    min_persistence=self.min_persistence,
-                    persistence_dim_max=False
-                )
-                for simplex_tree in simplex_tree_list
-            ]
-            for simplex_tree_list in self.simplex_tree_lists_
-        ]
-        dgm_formatted_lists = [
-            [
-                self._format_dgm(dgm)[0]
-                for dgm in dgm_list
-            ]
-            for dgm_list in dgm_lists
-        ]
-        if self.drop_infinite_persistence:
-            dgm_formatted_lists = [
+        if self.use_extended_persistence:
+            for simplex_tree_list in self.simplex_tree_lists_:
+                for simplex_tree in simplex_tree_list:
+                    simplex_tree.extend_filtration()
+            dgms_lists = [
                 [
-                    dgm[np.isfinite(dgm).all(axis=1)]
-                    for dgm in dgm_formatted_list
+                    simplex_tree.extended_persistence(
+                        homology_coeff_field=self.homology_coeff_field,
+                        min_persistence=self.min_persistence,
+                    )
+                    for simplex_tree in simplex_tree_list
                 ]
-                for dgm_formatted_list in dgm_formatted_lists
+                for simplex_tree_list in self.simplex_tree_lists_
             ]
-        return dgm_formatted_lists
+        else:
+            dgms_lists = [
+                [
+                    [
+                        simplex_tree.persistence(
+                            homology_coeff_field=self.homology_coeff_field,
+                            min_persistence=self.min_persistence,
+                            persistence_dim_max=False,
+                        )
+                    ]
+                    for simplex_tree in simplex_tree_list
+                ]
+                for simplex_tree_list in self.simplex_tree_lists_
+            ]
+        dgms_formatted_lists = [
+            [
+                [
+                    self._format_dgm(dgm)
+                    for dgm in dgms[:3]  # drop fourth diagram because it is
+                    # either empty (in case of extended persistence) or
+                    # non-existent (in case of ordinary persistence)
+                ]
+                for dgms in dgms_list
+            ]
+            for dgms_list in dgms_lists
+        ]
+        if (
+            not self.use_extended_persistence
+            and self.drop_infinite_persistence
+        ):
+            dgms_formatted_lists = [
+                [
+                    [
+                        [
+                            dim[np.isfinite(dim).all(axis=1)]
+                            for dim in dgm
+                        ]
+                        for dgm in dgms
+                    ]
+                    for dgms in dgms_formatted_list
+                ]
+                for dgms_formatted_list in dgms_formatted_lists
+            ]
+        return dgms_formatted_lists
 
     def _get_simplex_tree(
         self,
