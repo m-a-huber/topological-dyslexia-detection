@@ -17,24 +17,26 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
             46337. Defaults to `11`.
         min_persistence (float, optional): The minimum persistence value to
             take into account. Defaults to `0.0`.
-        type (str, optional): Which type of filtration to use for time series.
-            Must be one of `"normal"`, `"sloped"`, `"sigmoidal"` and
-            `"arctan"`. Defaults to `"normal"`.
+        filtration_type (str, optional): Which type of filtration to use for
+            time series. Must be one of `"normal"`, `"sloped"`, `"sigmoidal"`
+            and `"arctan"`. Defaults to `"normal"`.
         linear_slope (float, optional): Slope of line used to construct sloped
-            filtration. Ignored unless `type` is set to `"sloped"`.
+            filtration. Ignored unless `filtration_type` is set to `"sloped"`.
             Defaults to `1.0`.
         sigmoid_slope (float, optional): Slope of sigmoid curve (at its unique
             inflection point) used to construct sigmoidal filtration. That is,
             the sweeping curve is sigma(x):=1/(1+exp(-4*sigmoid_slope*x)).
-            Ignored unless `type` is set to `"sigmoidal"`. Defaults to `1.0`.
+            Ignored unless `filtration_type` is set to `"sigmoidal"`.
+            Defaultsto `1.0`.
         arctan_slope (float, optional): Slope of arctan curve (at its unique
             inflection point) used to construct sigmoidal filtration. That is,
             the sweeping curve is tau(x):=arctan(pi*arctan_slope*x)/pi+0.5.
-            Ignored unless `type` is set to `"arctan"`. Defaults to `1.0`.
+            Ignored unless `filtration_type` is set to `"arctan"`.
+            Defaults to `1.0`.
         padding_factor (float, optional): Factor by which to pad min-max range
             of values of time series to avoid infinite filtration values.
-            Ignored unless `"type"` is set to `"sigmoidal"` or `"arctan"`.
-            Defaults to `0.05`.
+            Ignored unless `"filtration_type"` is set to `"sigmoidal"` or
+            `"arctan"`. Defaults to `0.05`.
         use_extended_persistence (bool, optional): Whether or not to compute
             extended persistence as opposed to ordinary persistence. Defaults
             to `True`.
@@ -49,7 +51,7 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
         self,
         homology_coeff_field: int = 11,
         min_persistence: float = 0.0,
-        type: str = "normal",
+        filtration_type: str = "normal",
         linear_slope: float = 1.0,
         sigmoid_slope: float = 1.0,
         arctan_slope: float = 1.0,
@@ -59,7 +61,7 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
     ):
         self.homology_coeff_field = homology_coeff_field
         self.min_persistence = min_persistence
-        self.type = type
+        self.filtration_type = filtration_type
         self.linear_slope = linear_slope
         self.sigmoid_slope = sigmoid_slope
         self.arctan_slope = arctan_slope
@@ -212,9 +214,9 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
         return st
 
     def _get_vertex_filtrations(self, time_series):
-        if self.type == "normal":
+        if self.filtration_type == "normal":
             return time_series[:, 1]
-        elif self.type == "sloped":
+        elif self.filtration_type == "sloped":
             x_range = np.ptp(
                 time_series,
                 axis=0
@@ -236,7 +238,7 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
                 axis=1,
                 arr=time_series
             )
-        elif self.type == "sigmoidal":
+        elif self.filtration_type == "sigmoidal":
             x_range = np.ptp(
                 time_series,
                 axis=0
@@ -261,7 +263,7 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
                 axis=1,
                 arr=time_series
             )
-        elif self.type == "arctan":
+        elif self.filtration_type == "arctan":
             x_range = np.ptp(
                 time_series,
                 axis=0
@@ -288,8 +290,8 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
             )
         else:
             raise ValueError(
-                "Got invalid value for `type`, must be one of `'normal'`, "
-                "`'sloped'`, `'sigmoidal'` and `'arctan'`"
+                "Got invalid value for `filtration_type`, must be one of "
+                "`'normal'`, `'sloped'`, `'sigmoidal'` and `'arctan'`."
             )
 
     def _format_dgm(
