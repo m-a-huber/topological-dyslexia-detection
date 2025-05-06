@@ -149,7 +149,7 @@ if __name__ == "__main__":
     overwrite = sys.argv[3] == "True"
 
     n_splits = 5  # number of splits in StratifiedKFold
-    n_iter = 2  # number of iterations for BayesSearchCV
+    n_iter = 50  # number of iterations for BayesSearchCV
     n_jobs = -1  # parallelism for BayesSearchCV
     verbose = 2
     random_state = 42
