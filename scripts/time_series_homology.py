@@ -8,38 +8,38 @@ from typing_extensions import Self
 
 
 class TimeSeriesHomology(TransformerMixin, BaseEstimator):
-    """Class implementing normal, sloped, sigmoidal and arctan persistence of
+    """Class implementing horizontal, sloped, sigmoid and arctan persistence of
     (possibly multivariate) time series.
 
     Parameters:
-        homology_coeff_field (int, optional): The field coefficient over which
-            homology is computed. Must be a prime number less than or equal to
-            46337. Defaults to `11`.
-        min_persistence (float, optional): The minimum persistence value to
-            take into account. Defaults to `0.0`.
         filtration_type (str, optional): Which type of filtration to use for
-            time series. Must be one of `"normal"`, `"sloped"`, `"sigmoidal"`
-            and `"arctan"`. Defaults to `"normal"`.
-        linear_slope (float, optional): Slope of line used to construct sloped
+            time series. Must be one of `"horizontal"`, `"sloped"`, `"sigmoid"`
+            and `"arctan"`. Defaults to `"horizontal"`.
+        slope (float, optional): Slope of line used to construct sloped
             filtration. Ignored unless `filtration_type` is set to `"sloped"`.
             Defaults to `1.0`.
         sigmoid_slope (float, optional): Slope of sigmoid curve (at its unique
-            inflection point) used to construct sigmoidal filtration. That is,
+            inflection point) used to construct sigmoid filtration. That is,
             the sweeping curve is sigma(x):=1/(1+exp(-4*sigmoid_slope*x)).
-            Ignored unless `filtration_type` is set to `"sigmoidal"`.
+            Ignored unless `filtration_type` is set to `"sigmoid"`.
             Defaultsto `1.0`.
         arctan_slope (float, optional): Slope of arctan curve (at its unique
-            inflection point) used to construct sigmoidal filtration. That is,
+            inflection point) used to construct sigmoid filtration. That is,
             the sweeping curve is tau(x):=arctan(pi*arctan_slope*x)/pi+0.5.
             Ignored unless `filtration_type` is set to `"arctan"`.
             Defaults to `1.0`.
         padding_factor (float, optional): Factor by which to pad min-max range
             of values of time series to avoid infinite filtration values.
-            Ignored unless `"filtration_type"` is set to `"sigmoidal"` or
+            Ignored unless `"filtration_type"` is set to `"sigmoid"` or
             `"arctan"`. Defaults to `0.05`.
         use_extended_persistence (bool, optional): Whether or not to compute
             extended persistence as opposed to ordinary persistence. Defaults
             to `True`.
+        homology_coeff_field (int, optional): The field coefficient over which
+            homology is computed. Must be a prime number less than or equal to
+            46337. Defaults to `11`.
+        min_persistence (float, optional): The minimum persistence value to
+            take into account. Defaults to `0.0`.
         drop_infinite_persistence (bool, optional): Whether or not to drop
             homological generators with infinite lifespan from the resulting
             persistences. Ignored if `use_extended_persistence` is set to
@@ -49,24 +49,24 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
 
     def __init__(
         self,
-        homology_coeff_field: int = 11,
-        min_persistence: float = 0.0,
-        filtration_type: str = "normal",
-        linear_slope: float = 1.0,
+        filtration_type: str = "horizontal",
+        slope: float = 1.0,
         sigmoid_slope: float = 1.0,
         arctan_slope: float = 1.0,
         padding_factor: float = 0.05,
         use_extended_persistence: bool = True,
+        homology_coeff_field: int = 11,
+        min_persistence: float = 0.0,
         drop_infinite_persistence: bool = False,
     ):
-        self.homology_coeff_field = homology_coeff_field
-        self.min_persistence = min_persistence
         self.filtration_type = filtration_type
-        self.linear_slope = linear_slope
+        self.slope = slope
         self.sigmoid_slope = sigmoid_slope
         self.arctan_slope = arctan_slope
         self.padding_factor = padding_factor
         self.use_extended_persistence = use_extended_persistence
+        self.homology_coeff_field = homology_coeff_field
+        self.min_persistence = min_persistence
         self.drop_infinite_persistence = drop_infinite_persistence
 
     def fit(
@@ -214,7 +214,7 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
         return st
 
     def _get_vertex_filtrations(self, time_series):
-        if self.filtration_type == "normal":
+        if self.filtration_type == "horizontal":
             return time_series[:, 1]
         elif self.filtration_type == "sloped":
             x_range = np.ptp(
@@ -232,13 +232,13 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
             def _get_filtration(a):
                 # a is array of shape (2,) interpreted as containing t- and
                 # x-value of time series
-                return a[0] - (a[1] - x_mid) / self.linear_slope
+                return a[0] - (a[1] - x_mid) / self.slope
             return np.apply_along_axis(
                 func1d=_get_filtration,
                 axis=1,
                 arr=time_series
             )
-        elif self.filtration_type == "sigmoidal":
+        elif self.filtration_type == "sigmoid":
             x_range = np.ptp(
                 time_series,
                 axis=0
@@ -291,7 +291,7 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
         else:
             raise ValueError(
                 "Got invalid value for `filtration_type`, must be one of "
-                "`'normal'`, `'sloped'`, `'sigmoidal'` and `'arctan'`."
+                "`'horizontal'`, `'sloped'`, `'sigmoid'` and `'arctan'`."
             )
 
     def _format_dgm(

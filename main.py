@@ -169,8 +169,8 @@ if __name__ == "__main__":
         time_series_dir=time_series_dir,
     )
 
-    for filtration_type in ["normal", "sloped", "sigmoidal", "arctan"]:
-        if filtration_type == "normal":
+    for filtration_type in ["horizontal", "sloped", "sigmoid", "arctan"]:
+        if filtration_type == "horizontal":
             search_space = {
                 "persistence_imager__base_estimator__bandwidth": Real(
                     0.01, 1, prior="log-uniform"
@@ -191,7 +191,7 @@ if __name__ == "__main__":
                 "svc__gamma": Real(0.0001, 100, prior="log-uniform"),
                 "svc__kernel": Categorical(["linear", "rbf"]),
             }
-        if filtration_type == "sigmoidal":
+        if filtration_type == "sigmoid":
             search_space = {
                 "time_series_homology__sigmoid_slope": Real(
                     -4, 4, prior="uniform"
