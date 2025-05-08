@@ -196,6 +196,9 @@ if __name__ == "__main__":
                 "time_series_homology__sigmoid_slope": Real(
                     -4, 4, prior="uniform"
                 ),
+                "time_series_homology__padding_factor": Real(
+                    0.01, 0.05, prior="uniform"
+                ),
                 "persistence_imager__base_estimator__bandwidth": Real(
                     0.01, 1, prior="log-uniform"
                 ),
@@ -207,6 +210,9 @@ if __name__ == "__main__":
             search_space = {
                 "time_series_homology__arctan_slope": Real(
                     -4, 4, prior="uniform"
+                ),
+                "time_series_homology__padding_factor": Real(
+                    0.01, 0.05, prior="uniform"
                 ),
                 "persistence_imager__base_estimator__bandwidth": Real(
                     0.01, 1, prior="log-uniform"
