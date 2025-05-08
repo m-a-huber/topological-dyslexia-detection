@@ -80,10 +80,11 @@ def train_eval_svm(
             )),
             ("svc", SVC(class_weight="balanced"))
         ])
-        cv = StratifiedKFold(
+        rng = np.random.default_rng(random_state)
+        inner_cv = StratifiedKFold(
             n_splits=n_splits,
             shuffle=True,
-            random_state=random_state,
+            random_state=rng.integers(0, 10_000),
         )
         bayes_search = BayesSearchCV(
             estimator=pipeline,
@@ -91,11 +92,16 @@ def train_eval_svm(
             n_iter=n_iter,
             scoring="roc_auc",
             n_jobs=n_jobs,
-            cv=cv,
+            cv=inner_cv,
             verbose=verbose,
-            random_state=random_state,
+            random_state=rng.integers(0, 10_000),
         )
         bayes_search.fit(X, y)
+        outer_cv = StratifiedKFold(
+            n_splits=n_splits,
+            shuffle=True,
+            random_state=rng.integers(0, 10_000),
+        )
         cv_results, best_params, cv_roc_scores = (
             bayes_search.cv_results_,
             bayes_search.best_params_,
@@ -103,8 +109,9 @@ def train_eval_svm(
                 bayes_search.best_estimator_,
                 X,
                 y,
-                cv=cv,
+                cv=outer_cv,
                 scoring="roc_auc",
+                n_jobs=n_jobs,
             )
         )
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -162,53 +169,50 @@ if __name__ == "__main__":
         time_series_dir=time_series_dir,
     )
 
-    # Set parameter space for BayesSearchCV; best params found by hand are [
-    #     -0.25, 0.1, 1, "auto", "linear"
-    # ] (in the order below)
     for filtration_type in ["normal", "sloped", "sigmoidal", "arctan"]:
         if filtration_type == "normal":
             search_space = {
                 "persistence_imager__base_estimator__bandwidth": Real(
-                    0.01, 0.1, prior="log-uniform"
+                    0.01, 1, prior="log-uniform"
                 ),
-                "svc__C": Real(0.1, 10, prior="log-uniform"),
-                "svc__gamma": Real(0.01, 10, prior="log-uniform"),
+                "svc__C": Real(1, 10000, prior="log-uniform"),
+                "svc__gamma": Real(0.0001, 100, prior="log-uniform"),
                 "svc__kernel": Categorical(["linear", "rbf"]),
             }
         if filtration_type == "sloped":
             search_space = {
                 "time_series_homology__linear_slope": Real(
-                    -1, 1, prior="uniform"
+                    -4, 4, prior="uniform"
                 ),
                 "persistence_imager__base_estimator__bandwidth": Real(
-                    0.01, 0.1, prior="log-uniform"
+                    0.01, 1, prior="log-uniform"
                 ),
-                "svc__C": Real(0.1, 10, prior="log-uniform"),
-                "svc__gamma": Real(0.01, 10, prior="log-uniform"),
+                "svc__C": Real(1, 10000, prior="log-uniform"),
+                "svc__gamma": Real(0.0001, 100, prior="log-uniform"),
                 "svc__kernel": Categorical(["linear", "rbf"]),
             }
         if filtration_type == "sigmoidal":
             search_space = {
                 "time_series_homology__sigmoid_slope": Real(
-                    -1, 1, prior="uniform"
+                    -4, 4, prior="uniform"
                 ),
                 "persistence_imager__base_estimator__bandwidth": Real(
-                    0.01, 0.1, prior="log-uniform"
+                    0.01, 1, prior="log-uniform"
                 ),
-                "svc__C": Real(0.1, 10, prior="log-uniform"),
-                "svc__gamma": Real(0.01, 10, prior="log-uniform"),
+                "svc__C": Real(1, 10000, prior="log-uniform"),
+                "svc__gamma": Real(0.0001, 100, prior="log-uniform"),
                 "svc__kernel": Categorical(["linear", "rbf"]),
             }
         if filtration_type == "arctan":
             search_space = {
                 "time_series_homology__arctan_slope": Real(
-                    -1, 1, prior="uniform"
+                    -4, 4, prior="uniform"
                 ),
                 "persistence_imager__base_estimator__bandwidth": Real(
-                    0.01, 0.1, prior="log-uniform"
+                    0.01, 1, prior="log-uniform"
                 ),
-                "svc__C": Real(0.1, 10, prior="log-uniform"),
-                "svc__gamma": Real(0.01, 10, prior="log-uniform"),
+                "svc__C": Real(1, 10000, prior="log-uniform"),
+                "svc__gamma": Real(0.0001, 100, prior="log-uniform"),
                 "svc__kernel": Categorical(["linear", "rbf"]),
             }
         for use_extended_persistence in [True, False]:
@@ -218,7 +222,7 @@ if __name__ == "__main__":
                 else "without_extended_persistence"
             )
             out_dir = Path(
-                f"out_files_{filtration_type}_{suffix}"
+                f"out_files/{filtration_type}_{suffix}"
             )
             print(f"Running {filtration_type}_{suffix}...")
             cv_results, best_params, cv_roc_scores = (
@@ -237,10 +241,3 @@ if __name__ == "__main__":
                     random_state=random_state,
                 )
             )
-            print("Best Parameters:")
-            print(best_params)
-            print("Cross-validated ROC AUC scores:")
-            print(cv_roc_scores)
-            print("Average ROC AUC scores:")
-            print(f"{cv_roc_scores.mean()} ± {cv_roc_scores.std()}")
-            print(f"Finished {filtration_type}_{suffix}.")
