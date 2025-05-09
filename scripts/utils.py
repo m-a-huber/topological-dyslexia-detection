@@ -43,7 +43,7 @@ class PersistenceProcessor(BaseEstimator, TransformerMixin):
                     np.sort(gen)  # ensure lifetimes are positive
                     for dim in dgm
                     for gen in dim
-                ])
+                ]).reshape(-1, 2)
                 for coord in time_series
                 for dgm in coord
             ]
