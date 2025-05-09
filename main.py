@@ -256,7 +256,7 @@ if __name__ == "__main__":
             )
             print(f"Started {filtration_type}_{suffix}.")
             out_dir = Path(
-                f"out_files/{filtration_type}_{suffix}"
+                f"out_files_{corpus_name}/{filtration_type}_{suffix}"
             )
             cv_results, best_params, cv_roc_scores = (
                 train_eval_svm(
