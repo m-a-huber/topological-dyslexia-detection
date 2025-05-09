@@ -123,7 +123,8 @@ def get_labels(
     else:
         if verbose:
             tqdm.write(
-                f"Found native speaker labels at {out_file_native}; not "
+                f"Found native speaker labels at {out_file_native}; "
+                "not "
                 "overwriting."
             )
     out_file_dyslexic = out_dir / "is_dyslexic.npy"
@@ -132,11 +133,12 @@ def get_labels(
         np.save(out_file_dyslexic, is_dyslexic.astype(int))
         if verbose:
             tqdm.write(
-                f"Saved dyslexia labels to {out_file_native}."
+                f"Saved dyslexia labels to {out_file_dyslexic}."
             )
     else:
         if verbose:
             tqdm.write(
-                f"Found dyslexia labels at {out_file_native}; not overwriting."
+                f"Found dyslexia labels at {out_file_dyslexic}; "
+                "not overwriting."
             )
     return
