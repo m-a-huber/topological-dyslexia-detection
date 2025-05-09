@@ -64,33 +64,8 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
         X: npt.NDArray,
         y: Optional[None] = None,
     ) -> Self:
-        """Fits an instance of `TimeSeriesHomology` to a collection of
-        (possibly multivariate) time series by constructing simplex trees for
-        each time series in the collection and each coordinate of the value of
-        each time series.
-
-        Args:
-            X (list[npt.NDArray]): A list of time series, each of which is
-                given as a NumPy-array of shape (n_time_steps, n_features),
-                where the last axis contains tuples of the form
-                (time, value_1, ..., value_n).
-            y (None, optional): Not used, present here for API consistency with
-                scikit-learn.
-
-        Returns:
-            TimeSeriesHomology: A fitted instance of `TimeSeriesHomology` that
-                carries the attribute `simplex_tree_lists_`. This is a list of
-                lists of `gudhi.SimplexTree` instances, with one list per time
-                series and one sublist per coordinate of the value of the
-                respective time series.
+        """Does nothing, present here for API consistency with scikit-learn.
         """
-        self.simplex_tree_lists_: list[list[gd.SimplexTree]] = [
-            [
-                self._get_simplex_tree(time_series[:, [0, coord]])
-                for coord in range(1, time_series.shape[1])
-            ]
-            for time_series in X
-        ]
         return self
 
     def transform(
@@ -124,6 +99,13 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
                 with 0-dimensional homology and contains information from
                 consecutive homological dimensions.
         """
+        self.simplex_tree_lists_: list[list[gd.SimplexTree]] = [
+            [
+                self._get_simplex_tree(time_series[:, [0, coord]])
+                for coord in range(1, time_series.shape[1])
+            ]
+            for time_series in X
+        ]
         if self.use_extended_persistence:
             for simplex_tree_list in self.simplex_tree_lists_:
                 for simplex_tree in simplex_tree_list:
