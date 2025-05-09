@@ -100,7 +100,7 @@ def get_labels(
     out_file_dyslexic = time_series_dir / "labels/is_dyslexic.npy"
     if not out_file_dyslexic.is_file() or overwrite:
         is_dyslexic = []
-        for time_series_file in sorted(time_series_dir.rglob("*.npy")):
+        for time_series_file in sorted(time_series_dir.glob("*.npy")):
             id = "_".join(time_series_file.stem.split("_")[-2:])
             label = (
                 df_participants.filter(pl.col("Trial_ID") == id)
