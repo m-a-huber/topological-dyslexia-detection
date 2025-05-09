@@ -139,7 +139,9 @@ if __name__ == "__main__":
     corpus_name = sys.argv[1]  # one of "copco" and "reading_trials"
     overwrite = sys.argv[2] == "True"
 
-    n_splits = 5  # number of splits in StratifiedKFold
+    n_splits = (
+        5 if corpus_name == "copco" else 3
+    )  # number of splits in StratifiedKFold
     n_iter = 50  # number of iterations for BayesSearchCV
     n_jobs = -1  # parallelism for BayesSearchCV
     verbose = 2
