@@ -15,10 +15,7 @@ from sklearn.svm import SVC  # type: ignore
 from skopt import BayesSearchCV  # type: ignore
 from skopt.space import Categorical, Real  # type: ignore
 
-from scripts.process_data import (  # type: ignore
-    get_labels,
-    process_fixation_reports,
-)
+from scripts import process_data_copco  # type: ignore
 from scripts.time_series_homology import TimeSeriesHomology  # type: ignore
 from scripts.utils import (  # type: ignore
     ListTransformer,
@@ -136,7 +133,8 @@ def train_eval_svm(
 
 
 if __name__ == "__main__":
-    overwrite = sys.argv[1] == "True"
+    corpus_name = sys.argv[1]  # one of "copco" and "reading_trials"
+    overwrite = sys.argv[2] == "True"
 
     n_splits = 5  # number of splits in StratifiedKFold
     n_iter = 50  # number of iterations for BayesSearchCV
@@ -145,24 +143,32 @@ if __name__ == "__main__":
     random_state = 42
 
     # Process corpus files and create time series data
-    fixation_reports_dir = Path("data/FixationReports")
-    dataset_statistics_dir = Path("data/DatasetStatistics")
-    participants_stats_path = dataset_statistics_dir / Path(
-        "participant_stats.csv"
-    )
-    time_series_dir = Path("data/TimeSeriesData")
-    process_fixation_reports(
-        fixation_reports_dir=fixation_reports_dir,
-        out_dir=time_series_dir,
-        verbose=bool(verbose),
-        overwrite=overwrite,
-    )
-    get_labels(
-        participants_stats_path=participants_stats_path,
-        out_dir=time_series_dir / "labels",
-        verbose=bool(verbose),
-        overwrite=overwrite,
-    )
+    if corpus_name == "copco":
+        fixation_reports_dir = Path("data_copco/FixationReports")
+        dataset_statistics_dir = Path("data_copco/DatasetStatistics")
+        participants_stats_path = dataset_statistics_dir / Path(
+            "participant_stats.csv"
+        )
+        time_series_dir = Path("data_copco/TimeSeriesData")
+        process_data_copco.process_fixation_reports(
+            fixation_reports_dir=fixation_reports_dir,
+            out_dir=time_series_dir,
+            verbose=bool(verbose),
+            overwrite=overwrite,
+        )
+        process_data_copco.get_labels(
+            participants_stats_path=participants_stats_path,
+            out_dir=time_series_dir / "labels",
+            verbose=bool(verbose),
+            overwrite=overwrite,
+        )
+    elif corpus_name == "reading_trials":
+        pass
+    else:
+        raise ValueError(
+            "Got invalid value for `corpus_name`, must be one of `'copco'` "
+            "and `'reading_trials'`."
+        )
 
     # Load data
     X, y = get_data(
@@ -181,7 +187,7 @@ if __name__ == "__main__":
             }
         if filtration_type == "sloped":
             search_space = {
-                "time_series_homology__linear_slope": Real(
+                "time_series_homology__slope": Real(
                     -4, 4, prior="uniform"
                 ),
                 "persistence_imager__base_estimator__bandwidth": Real(
@@ -193,7 +199,7 @@ if __name__ == "__main__":
             }
         if filtration_type == "sigmoid":
             search_space = {
-                "time_series_homology__sigmoid_slope": Real(
+                "time_series_homology__slope": Real(
                     -4, 4, prior="uniform"
                 ),
                 "time_series_homology__padding_factor": Real(
@@ -208,7 +214,7 @@ if __name__ == "__main__":
             }
         if filtration_type == "arctan":
             search_space = {
-                "time_series_homology__arctan_slope": Real(
+                "time_series_homology__slope": Real(
                     -4, 4, prior="uniform"
                 ),
                 "time_series_homology__padding_factor": Real(
@@ -227,10 +233,10 @@ if __name__ == "__main__":
                 if use_extended_persistence
                 else "without_extended_persistence"
             )
+            print(f"Started {filtration_type}_{suffix}.")
             out_dir = Path(
                 f"out_files/{filtration_type}_{suffix}"
             )
-            print(f"Running {filtration_type}_{suffix}...")
             cv_results, best_params, cv_roc_scores = (
                 train_eval_svm(
                     X=X,
@@ -247,3 +253,4 @@ if __name__ == "__main__":
                     random_state=random_state,
                 )
             )
+            print(f"Finished {filtration_type}_{suffix}.")
