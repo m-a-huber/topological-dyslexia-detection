@@ -15,7 +15,10 @@ from sklearn.svm import SVC  # type: ignore
 from skopt import BayesSearchCV  # type: ignore
 from skopt.space import Categorical, Real  # type: ignore
 
-from scripts import process_data_copco  # type: ignore
+from scripts import (  # type: ignore
+    process_data_copco,
+    process_data_reading_trials,
+)
 from scripts.time_series_homology import TimeSeriesHomology  # type: ignore
 from scripts.utils import (  # type: ignore
     ListTransformer,
@@ -163,7 +166,25 @@ if __name__ == "__main__":
             overwrite=overwrite,
         )
     elif corpus_name == "reading_trials":
-        pass
+        data_dir = Path("data_reading_trials")
+        fixation_reports_dir = Path("data_reading_trials/event_data_trial_1")
+        time_series_dir = Path("data_reading_trials/TimeSeriesData")
+        process_data_reading_trials.unzip_and_clean(
+            data_dir=data_dir,
+            min_n_fixations=5,
+        )
+        process_data_reading_trials.process_fixation_reports(
+            fixation_reports_dir=fixation_reports_dir,
+            out_dir=time_series_dir,
+            verbose=bool(verbose),
+            overwrite=overwrite,
+        )
+        process_data_reading_trials.get_labels(
+            data_dir=data_dir,
+            time_series_dir=time_series_dir,
+            verbose=bool(verbose),
+            overwrite=overwrite,
+        )
     else:
         raise ValueError(
             "Got invalid value for `corpus_name`, must be one of `'copco'` "
