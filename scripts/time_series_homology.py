@@ -15,18 +15,12 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
         filtration_type (str, optional): Which type of filtration to use for
             time series. Must be one of `"horizontal"`, `"sloped"`, `"sigmoid"`
             and `"arctan"`. Defaults to `"horizontal"`.
-        slope (float, optional): Slope of line used to construct sloped
-            filtration. Ignored unless `filtration_type` is set to `"sloped"`.
-            Defaults to `1.0`.
-        sigmoid_slope (float, optional): Slope of sigmoid curve (at its unique
-            inflection point) used to construct sigmoid filtration. That is,
-            the sweeping curve is sigma(x):=1/(1+exp(-4*sigmoid_slope*x)).
-            Ignored unless `filtration_type` is set to `"sigmoid"`.
-            Defaultsto `1.0`.
-        arctan_slope (float, optional): Slope of arctan curve (at its unique
-            inflection point) used to construct sigmoid filtration. That is,
-            the sweeping curve is tau(x):=arctan(pi*arctan_slope*x)/pi+0.5.
-            Ignored unless `filtration_type` is set to `"arctan"`.
+        slope (float, optional): Slope f'(0) of sweeping function f(t) used to
+            construct non-horizontal filtration. This is leads to the sweeping
+            function being f(t):=slope*t+0.5, f(t):=1/(1+exp(-4*slope*t)) or
+            f(t):=arctan(pi*slope*t)/pi+0.5 if `filtration_type` is set to
+            `"sloped"`, `"sigmoid"` or `"arctan"`, respectively. Ignored unless
+            `filtration_type` is set to `"sloped"`, `"sigmoid"` or `"arctan"`.
             Defaults to `1.0`.
         padding_factor (float, optional): Factor by which to pad min-max range
             of values of time series to avoid infinite filtration values.
@@ -51,8 +45,6 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
         self,
         filtration_type: str = "horizontal",
         slope: float = 1.0,
-        sigmoid_slope: float = 1.0,
-        arctan_slope: float = 1.0,
         padding_factor: float = 0.05,
         use_extended_persistence: bool = True,
         homology_coeff_field: int = 11,
@@ -61,8 +53,6 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
     ):
         self.filtration_type = filtration_type
         self.slope = slope
-        self.sigmoid_slope = sigmoid_slope
-        self.arctan_slope = arctan_slope
         self.padding_factor = padding_factor
         self.use_extended_persistence = use_extended_persistence
         self.homology_coeff_field = homology_coeff_field
@@ -74,6 +64,33 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
         X: npt.NDArray,
         y: Optional[None] = None,
     ) -> Self:
+        """Fits an instance of `TimeSeriesHomology` to a collection of
+        (possibly multivariate) time series by constructing simplex trees for
+        each time series in the collection and each coordinate of the value of
+        each time series.
+
+        Args:
+            X (list[npt.NDArray]): A list of time series, each of which is
+                given as a NumPy-array of shape (n_time_steps, n_features),
+                where the last axis contains tuples of the form
+                (time, value_1, ..., value_n).
+            y (None, optional): Not used, present here for API consistency with
+                scikit-learn.
+
+        Returns:
+            TimeSeriesHomology: A fitted instance of `TimeSeriesHomology` that
+                carries the attribute `simplex_tree_lists_`. This is a list of
+                lists of `gudhi.SimplexTree` instances, with one list per time
+                series and one sublist per coordinate of the value of the
+                respective time series.
+        """
+        self.simplex_tree_lists_: list[list[gd.SimplexTree]] = [
+            [
+                self._get_simplex_tree(time_series[:, [0, coord]])
+                for coord in range(1, time_series.shape[1])
+            ]
+            for time_series in X
+        ]
         return self
 
     def transform(
@@ -107,13 +124,6 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
                 with 0-dimensional homology and contains information from
                 consecutive homological dimensions.
         """
-        self.simplex_tree_lists_ = [
-            [
-                self._get_simplex_tree(time_series[:, [0, coord]])
-                for coord in range(1, time_series.shape[1])
-            ]
-            for time_series in X
-        ]
         if self.use_extended_persistence:
             for simplex_tree_list in self.simplex_tree_lists_:
                 for simplex_tree in simplex_tree_list:
@@ -192,9 +202,6 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
         st = gd.SimplexTree()
         vertex_array_vertices = np.arange(len(time_series)).reshape([1, -1])
         filtrations_vertices = self._get_vertex_filtrations(time_series)
-        filtrations_vertices = (
-            filtrations_vertices - np.min(filtrations_vertices)
-        )
         st.insert_batch(
             vertex_array=vertex_array_vertices,
             filtrations=filtrations_vertices
@@ -227,12 +234,15 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
             x_max = np.max(
                 time_series[:, 1]
             )
-            x_mid = 0.5 * (x_min + x_max)
 
             def _get_filtration(a):
                 # a is array of shape (2,) interpreted as containing t- and
                 # x-value of time series
-                return a[0] - (a[1] - x_mid) / self.slope
+                aux = (a[1] - x_min) / (x_max - x_min)
+                return a[0] - (
+                    (aux - 0.5)
+                    / self.slope
+                )
             return np.apply_along_axis(
                 func1d=_get_filtration,
                 axis=1,
@@ -253,10 +263,12 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
             def _get_filtration(a):
                 # a is array of shape (2,) interpreted as containing t- and
                 # x-value of time series
+                aux = (a[1] - x_min) / (x_max - x_min)
                 return (
-                    a[0]
-                    + np.log((x_max - a[1]) / (a[1] - x_min))
-                    / (4 * self.sigmoid_slope)
+                    a[0] + (
+                        np.log((1 / aux) - 1)
+                        / (4 * self.slope)
+                    )
                 )
             return np.apply_along_axis(
                 func1d=_get_filtration,
@@ -278,10 +290,12 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
             def _get_filtration(a):
                 # a is array of shape (2,) interpreted as containing t- and
                 # x-value of time series
+                aux = (a[1] - x_min) / (x_max - x_min)
                 return (
-                    a[0]
-                    - np.tan(np.pi * ((a[1] - x_min) / (x_max - x_min) - 0.5))
-                    / (np.pi * self.arctan_slope)
+                    a[0] - (
+                        np.tan(np.pi * (aux - 0.5))
+                        / (np.pi * self.slope)
+                    )
                 )
             return np.apply_along_axis(
                 func1d=_get_filtration,
