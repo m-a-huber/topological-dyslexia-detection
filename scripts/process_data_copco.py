@@ -15,7 +15,7 @@ def get_time_series_data(
 
     Args:
         sp_path (Path): Path pointing to a scanpath-file in
-            "data/FixationReports".
+            "data_copco/FixationReports".
 
     Returns:
         numpy.ndarray: NumPy-array of shape (n_fixations, 3) where each row
@@ -81,7 +81,7 @@ def process_fixation_reports(
         desc="Processing fixation reports"
     ):
         id = sp_path.stem.split("_")[-1]
-        out_file = out_dir / f"time_series_data_{id}.npy"
+        out_file = out_dir / f"time_series_data_copco_{id}.npy"
         if not out_file.is_file() or overwrite:
             out_file.parent.mkdir(exist_ok=True, parents=True)
             time_series_data = get_time_series_data(sp_path)
