@@ -1,6 +1,6 @@
 __pycache__/
 .vscode
 .venv
-data
+data*
 out_files*
 trash
