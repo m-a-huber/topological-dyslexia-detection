@@ -2,7 +2,7 @@ from pathlib import Path
 
 import numpy as np
 import numpy.typing as npt
-import polars as pl  # type: ignore
+import polars as pl
 from tqdm import tqdm  # type: ignore
 
 
