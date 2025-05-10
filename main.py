@@ -1,10 +1,12 @@
 import sys
+from collections import defaultdict
 from pathlib import Path  # type: ignore
 
 import gudhi.representations as gdrep  # type: ignore
 import joblib  # type: ignore
 import numpy as np
 import numpy.typing as npt
+import polars as pl
 from sklearn.model_selection import (  # type: ignore
     StratifiedKFold,
     cross_val_score,
@@ -135,13 +137,45 @@ def train_eval_svm(
     return cv_results, best_params, cv_roc_scores
 
 
+def make_df(
+    df_dict: defaultdict[str, dict],
+    df_path: Path,
+    verbose: bool,
+    overwrite: bool,
+) -> pl.DataFrame:
+    if not df_path.is_file() or overwrite:
+        rows = sorted(
+            set(key for col in df_dict.values() for key in col.keys())
+        )
+        table = []
+        for row in rows:
+            row_dict = {"index": row}
+            for col, values in df_dict.items():
+                row_dict[col] = values.get(row, None)
+            table.append(row_dict)
+        df_results = pl.DataFrame(table).sort(
+            ["with_extended_persistence", "without_extended_persistence"],
+            descending=True,
+        )
+        df_results.write_csv(df_path)
+        if verbose:
+            print(
+                f"Saved `df_results` to {df_path}."
+            )
+    else:
+        df_results = pl.read_csv(df_path)
+        if verbose:
+            print(
+                f"Found `df_results` at {df_path}; not overwriting."
+            )
+    return df_results
+
+
 if __name__ == "__main__":
     corpus_name = sys.argv[1]  # one of "copco" and "reading_trials"
     overwrite = sys.argv[2] == "True"
 
-    n_splits = (
-        5 if corpus_name == "copco" else 3
-    )  # number of splits in StratifiedKFold
+    n_splits = 5  # number of splits in StratifiedKFold
     n_iter = 50  # number of iterations for BayesSearchCV
     n_jobs = -1  # parallelism for BayesSearchCV
     verbose = 2
@@ -169,10 +203,11 @@ if __name__ == "__main__":
         )
     elif corpus_name == "reading_trials":
         data_dir = Path("data_reading_trials")
-        fixation_reports_dir = Path("data_reading_trials/event_data_trial_1")
+        fixation_reports_dir = Path("data_reading_trials/FixationReports")
         time_series_dir = Path("data_reading_trials/TimeSeriesData")
         process_data_reading_trials.unzip_and_clean(
             data_dir=data_dir,
+            fixation_reports_dir=fixation_reports_dir,
             min_n_fixations=5,
         )
         process_data_reading_trials.process_fixation_reports(
@@ -198,6 +233,7 @@ if __name__ == "__main__":
         time_series_dir=time_series_dir,
     )
 
+    df_dict: defaultdict[str, dict] = defaultdict(dict)
     for filtration_type in ["horizontal", "sloped", "sigmoid", "arctan"]:
         if filtration_type == "horizontal":
             search_space = {
@@ -277,3 +313,15 @@ if __name__ == "__main__":
                 )
             )
             print(f"Finished {filtration_type}_{suffix}.")
+            df_dict[suffix][filtration_type] = np.around(
+                cv_roc_scores.mean(), 4
+            )
+    df = make_df(
+        df_dict=df_dict,
+        df_path=out_dir.parent / f"eval_scores_{corpus_name}.csv",
+        verbose=bool(verbose),
+        overwrite=overwrite,
+    )
+    if verbose:
+        print("\nAverage ROC AUC scores:")
+        print(df)
