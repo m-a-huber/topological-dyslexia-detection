@@ -5,12 +5,13 @@ from pathlib import Path
 
 import numpy as np
 import numpy.typing as npt
-import polars as pl  # type: ignore
+import polars as pl
 from tqdm import tqdm  # type: ignore
 
 
 def unzip_and_clean(
     data_dir: Path,
+    fixation_reports_dir: Path,
     min_n_fixations: int,
 ) -> None:
     """Extracts those csv-files from data_dir/event_data_csv.zip that contain a
@@ -18,23 +19,21 @@ def unzip_and_clean(
     appears in `data_dir/slrt_results_new.csv`.
     """
     zip_path = data_dir / "event_data_csv.zip"
-    extract_to = data_dir / "event_data_trial_1"
-    if not extract_to.is_dir():
-        extract_to.mkdir(parents=True, exist_ok=True)
+    if not fixation_reports_dir.is_dir():
+        fixation_reports_dir.mkdir(parents=True, exist_ok=True)
     df_participants = pl.read_csv(data_dir / "slrt_results_new.csv")
     with zipfile.ZipFile(zip_path, "r") as zip_ref:
         for file in zip_ref.namelist():
             filestem = Path(file).stem
             filename = Path(file).name
             if (
-                filestem.endswith("_1")
-                and filestem in df_participants["Trial_ID"]
+                filestem in df_participants["Trial_ID"]
             ):
                 file_data = zip_ref.read(file)
                 csv_reader = csv.reader(io.StringIO(file_data.decode("utf-8")))
                 rows = list(csv_reader)
-                if len(rows) >= min_n_fixations + 1:  # exclude header
-                    out_path = extract_to / filename
+                if len(rows) >= min_n_fixations:  # exclude header
+                    out_path = fixation_reports_dir / filename
                     out_path.write_bytes(file_data)
     return
 
