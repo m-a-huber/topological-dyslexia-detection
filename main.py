@@ -7,15 +7,18 @@ import joblib  # type: ignore
 import numpy as np
 import numpy.typing as npt
 import polars as pl
+from sklearn.base import clone  # type: ignore
+from sklearn.metrics import roc_auc_score  # type: ignore
 from sklearn.model_selection import (  # type: ignore
+    PredefinedSplit,
     StratifiedKFold,
-    cross_val_score,
 )
 from sklearn.pipeline import Pipeline  # type: ignore
 from sklearn.preprocessing import MinMaxScaler, StandardScaler  # type: ignore
 from sklearn.svm import SVC  # type: ignore
 from skopt import BayesSearchCV  # type: ignore
 from skopt.space import Categorical, Real  # type: ignore
+from tqdm import tqdm  # type: ignore
 
 from scripts import (  # type: ignore
     process_data_copco,
@@ -26,6 +29,7 @@ from scripts.utils import (  # type: ignore
     ListTransformer,
     PersistenceImageProcessor,
     PersistenceProcessor,
+    weight_abs1p,
 )
 
 
@@ -41,13 +45,6 @@ def get_data(
     return X, y
 
 
-def weight_abs1p(pt):
-    """Custom weight function for persistence images that weighs points in a
-    persistence diagram by lifetime plus 1.
-    """
-    return np.abs(pt[1]) + 1
-
-
 def train_eval_svm(
     X: list[npt.NDArray],
     y: npt.NDArray,
@@ -57,17 +54,21 @@ def train_eval_svm(
     n_splits: int,
     search_space: dict,
     n_iter: int,
+    n_points: int,
     n_jobs: int | None,
     verbose: int,
     overwrite: bool,
     random_state: int | None,
-) -> tuple[dict, dict, npt.NDArray]:
+) -> tuple[npt.NDArray, list[dict]]:
+    best_params_path = out_dir / "best_params.pkl"
+    roc_scores_path = out_dir / "roc_scores.npy"
     if not out_dir.is_dir() or overwrite:
         TimeSeriesScaler = ListTransformer(base_estimator=StandardScaler())
         PersistenceImager = ListTransformer(gdrep.PersistenceImage(
             resolution=(75, 75),
             weight=weight_abs1p
         ))
+        memory = joblib.Memory(location=out_dir / "pipeline_cache", verbose=0)
         pipeline = Pipeline([
             ("time_series_scaler", TimeSeriesScaler),
             ("time_series_homology", TimeSeriesHomology(
@@ -81,60 +82,102 @@ def train_eval_svm(
                 scaler=MinMaxScaler()
             )),
             ("svc", SVC(class_weight="balanced"))
-        ])
+        ], memory=memory)
         rng = np.random.default_rng(random_state)
-        inner_cv = StratifiedKFold(
+        skf = StratifiedKFold(
             n_splits=n_splits,
             shuffle=True,
             random_state=rng.integers(0, 10_000),
         )
-        bayes_search = BayesSearchCV(
-            estimator=pipeline,
-            search_spaces=search_space,
-            n_iter=n_iter,
-            scoring="roc_auc",
-            n_jobs=n_jobs,
-            cv=inner_cv,
-            verbose=verbose,
-            random_state=rng.integers(0, 10_000),
-        )
-        bayes_search.fit(X, y)
-        outer_cv = StratifiedKFold(
-            n_splits=n_splits,
-            shuffle=True,
-            random_state=rng.integers(0, 10_000),
-        )
-        cv_results, best_params, cv_roc_scores = (
-            bayes_search.cv_results_,
-            bayes_search.best_params_,
-            cross_val_score(
-                bayes_search.best_estimator_,
-                X,
-                y,
-                cv=outer_cv,
+        fold_ixss = [
+            test_ixs
+            for train_ixs, test_ixs in skf.split(X, y)
+        ]
+        best_params_list = []
+        roc_scores_list = []
+        for test_fold in tqdm(
+            range(n_splits),
+            desc=f"Training and evaluating on {n_splits} splits with {n_iter} "
+            "iterations each."
+        ):
+            # Pick val fold randomly from non-test folds
+            val_fold = rng.choice(
+                [fold for fold in range(n_splits) if fold != test_fold]
+            )
+            # Combine non-test and non-val fold into train fold
+            train_folds = [
+                fold
+                for fold in range(n_splits)
+                if fold not in (test_fold, val_fold)
+            ]
+            X_test, y_test = (
+                [X[fold_ix] for fold_ix in fold_ixss[test_fold]],
+                [y[fold_ix] for fold_ix in fold_ixss[test_fold]],
+            )
+            X_val, y_val = (
+                [X[fold_ix] for fold_ix in fold_ixss[val_fold]],
+                [y[fold_ix] for fold_ix in fold_ixss[val_fold]],
+            )
+            X_train, y_train = (
+                [
+                    X[fold_ix]
+                    for fold_ix in np.concatenate(
+                        [fold_ixss[i] for i in train_folds]
+                    )
+                ],
+                [
+                    y[fold_ix]
+                    for fold_ix in np.concatenate(
+                        [fold_ixss[i] for i in train_folds]
+                    )
+                ],
+            )
+            X_combined = X_train + X_val
+            y_combined = y_train + y_val
+            ps = PredefinedSplit([-1] * len(X_train) + [0] * len(X_val))
+            bayes_search = BayesSearchCV(
+                estimator=pipeline,
+                search_spaces=search_space,
+                n_iter=n_iter,
+                n_points=n_points,
                 scoring="roc_auc",
                 n_jobs=n_jobs,
+                cv=ps,
+                verbose=verbose,
+                random_state=rng.integers(0, 10_000),
+                refit=False,
             )
-        )
+            bayes_search.fit(X_combined, y_combined)
+            best_params_list.append(
+                bayes_search.best_params_
+            )
+            best_model = clone(pipeline).set_params(
+                **bayes_search.best_params_
+            )
+            best_model.fit(
+                X_combined,
+                y_combined
+            )
+            roc_scores_list.append(
+                roc_auc_score(y_test, best_model.decision_function(X_test))
+            )
         out_dir.mkdir(parents=True, exist_ok=True)
-        joblib.dump(cv_results, out_dir / "cv_results.pkl")
-        joblib.dump(best_params, out_dir / "best_params.pkl")
-        joblib.dump(cv_roc_scores, out_dir / "cv_roc_scores.pkl")
+        joblib.dump(best_params_list, best_params_path)
+        roc_scores = np.array(roc_scores_list)
+        np.save(roc_scores_path, roc_scores)
         if verbose:
             print(
-                "Saved `cv_results`, `best_params` and `cv_roc_scores` "
-                f"in {out_dir}."
+                f"Saved `best_params_list` and `roc_scores` in {out_dir}."
             )
     else:
-        cv_results = joblib.load(out_dir / "cv_results.pkl")
-        best_params = joblib.load(out_dir / "best_params.pkl")
-        cv_roc_scores = joblib.load(out_dir / "cv_roc_scores.pkl")
+        best_params_list = joblib.load(best_params_path)
+        roc_scores = np.load(roc_scores_path)
         if verbose:
             print(
-                "Found `cv_results`, `best_params` and `cv_roc_scores` "
-                f"in {out_dir}; not overwriting."
+                f"Found `best_params_list` and `roc_scores` in {out_dir}; "
+                "not overwriting."
             )
-    return cv_results, best_params, cv_roc_scores
+    return roc_scores, best_params_list
 
 
 def make_df(
@@ -175,8 +218,9 @@ if __name__ == "__main__":
     corpus_name = sys.argv[1]  # one of "copco" and "reading_trials"
     overwrite = sys.argv[2] == "True"
 
-    n_splits = 5  # number of splits in StratifiedKFold
-    n_iter = 50  # number of iterations for BayesSearchCV
+    n_splits = 10  # number of splits in StratifiedKFold
+    n_iter = 40  # number of iterations for BayesSearchCV
+    n_points = 8  # number of parallel points for BayesSearchCV
     n_jobs = -1  # parallelism for BayesSearchCV
     verbose = 2
     random_state = 42
@@ -240,8 +284,8 @@ if __name__ == "__main__":
                 "persistence_imager__base_estimator__bandwidth": Real(
                     0.01, 1, prior="log-uniform"
                 ),
-                "svc__C": Real(1, 10000, prior="log-uniform"),
-                "svc__gamma": Real(0.0001, 100, prior="log-uniform"),
+                "svc__C": Real(1e-2, 1e2, prior="log-uniform"),
+                "svc__gamma": Real(1e-3, 10, prior="log-uniform"),
                 "svc__kernel": Categorical(["linear", "rbf"]),
             }
         if filtration_type == "sloped":
@@ -252,8 +296,8 @@ if __name__ == "__main__":
                 "persistence_imager__base_estimator__bandwidth": Real(
                     0.01, 1, prior="log-uniform"
                 ),
-                "svc__C": Real(1, 10000, prior="log-uniform"),
-                "svc__gamma": Real(0.0001, 100, prior="log-uniform"),
+                "svc__C": Real(1e-2, 1e2, prior="log-uniform"),
+                "svc__gamma": Real(1e-3, 10, prior="log-uniform"),
                 "svc__kernel": Categorical(["linear", "rbf"]),
             }
         if filtration_type == "sigmoid":
@@ -267,8 +311,8 @@ if __name__ == "__main__":
                 "persistence_imager__base_estimator__bandwidth": Real(
                     0.01, 1, prior="log-uniform"
                 ),
-                "svc__C": Real(1, 10000, prior="log-uniform"),
-                "svc__gamma": Real(0.0001, 100, prior="log-uniform"),
+                "svc__C": Real(1e-2, 1e2, prior="log-uniform"),
+                "svc__gamma": Real(1e-3, 10, prior="log-uniform"),
                 "svc__kernel": Categorical(["linear", "rbf"]),
             }
         if filtration_type == "arctan":
@@ -282,8 +326,8 @@ if __name__ == "__main__":
                 "persistence_imager__base_estimator__bandwidth": Real(
                     0.01, 1, prior="log-uniform"
                 ),
-                "svc__C": Real(1, 10000, prior="log-uniform"),
-                "svc__gamma": Real(0.0001, 100, prior="log-uniform"),
+                "svc__C": Real(1e-2, 1e2, prior="log-uniform"),
+                "svc__gamma": Real(1e-3, 10, prior="log-uniform"),
                 "svc__kernel": Categorical(["linear", "rbf"]),
             }
         for use_extended_persistence in [True, False]:
@@ -296,7 +340,7 @@ if __name__ == "__main__":
             out_dir = Path(
                 f"out_files_{corpus_name}/{filtration_type}_{suffix}"
             )
-            cv_results, best_params, cv_roc_scores = (
+            roc_scores, best_params_list = (
                 train_eval_svm(
                     X=X,
                     y=y,
@@ -304,6 +348,7 @@ if __name__ == "__main__":
                     filtration_type=filtration_type,
                     use_extended_persistence=use_extended_persistence,
                     n_splits=n_splits,
+                    n_points=n_points,
                     search_space=search_space,
                     n_iter=n_iter,
                     n_jobs=n_jobs,
@@ -314,7 +359,7 @@ if __name__ == "__main__":
             )
             print(f"Finished {filtration_type}_{suffix}.")
             df_dict[suffix][filtration_type] = np.around(
-                cv_roc_scores.mean(), 4
+                roc_scores.mean(), 4
             )
     df = make_df(
         df_dict=df_dict,
