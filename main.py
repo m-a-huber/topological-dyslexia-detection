@@ -166,14 +166,14 @@ def train_eval_svm(
         roc_scores = np.array(roc_scores_list)
         np.save(roc_scores_path, roc_scores)
         if verbose:
-            print(
+            tqdm.write(
                 f"Saved `best_params_list` and `roc_scores` in {out_dir}."
             )
     else:
         best_params_list = joblib.load(best_params_path)
         roc_scores = np.load(roc_scores_path)
         if verbose:
-            print(
+            tqdm.write(
                 f"Found `best_params_list` and `roc_scores` in {out_dir}; "
                 "not overwriting."
             )
@@ -336,7 +336,7 @@ if __name__ == "__main__":
                 if use_extended_persistence
                 else "without_extended_persistence"
             )
-            print(f"Started {filtration_type}_{suffix}.")
+            tqdm.write(f"Started {filtration_type}_{suffix}.")
             out_dir = Path(
                 f"out_files_{corpus_name}/{filtration_type}_{suffix}"
             )
@@ -357,7 +357,7 @@ if __name__ == "__main__":
                     random_state=random_state,
                 )
             )
-            print(f"Finished {filtration_type}_{suffix}.")
+            tqdm.write(f"Finished {filtration_type}_{suffix}.")
             df_dict[suffix][filtration_type] = np.around(
                 roc_scores.mean(), 4
             )
