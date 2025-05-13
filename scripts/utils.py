@@ -6,6 +6,13 @@ from sklearn.base import (  # type: ignore
 )
 
 
+def weight_abs1p(pt):
+    """Custom weight function for persistence images that weighs points in a
+    persistence diagram by lifetime plus 1.
+    """
+    return np.abs(pt[1]) + 1
+
+
 class ListTransformer(BaseEstimator, TransformerMixin):
     """Helper class that, given a sklearn-estimator that can be applied to a
     list of points, creates a version of that estimator that can be applied to
