@@ -68,7 +68,6 @@ def train_eval_svm(
             resolution=(75, 75),
             weight=weight_abs1p
         ))
-        memory = joblib.Memory(location=out_dir / "pipeline_cache", verbose=0)
         pipeline = Pipeline([
             ("time_series_scaler", TimeSeriesScaler),
             ("time_series_homology", TimeSeriesHomology(
@@ -82,7 +81,7 @@ def train_eval_svm(
                 scaler=MinMaxScaler()
             )),
             ("svc", SVC(class_weight="balanced"))
-        ], memory=memory)
+        ])
         rng = np.random.default_rng(random_state)
         skf = StratifiedKFold(
             n_splits=n_splits,
@@ -218,7 +217,9 @@ if __name__ == "__main__":
     corpus_name = sys.argv[1]  # one of "copco" and "reading_trials"
     overwrite = sys.argv[2] == "True"
 
-    n_splits = 10  # number of splits in StratifiedKFold
+    n_splits = (
+        5 if corpus_name == "copco" else 10
+    )  # number of splits in StratifiedKFold
     n_iter = 40  # number of iterations for BayesSearchCV
     n_points = 8  # number of parallel points for BayesSearchCV
     n_jobs = -1  # parallelism for BayesSearchCV
@@ -228,20 +229,29 @@ if __name__ == "__main__":
     # Process corpus files and create time series data
     if corpus_name == "copco":
         fixation_reports_dir = Path("data_copco/FixationReports")
+        fixation_reports_by_trial_dir = Path(
+            "data_copco/FixationReportsByTrial"
+        )
         dataset_statistics_dir = Path("data_copco/DatasetStatistics")
         participants_stats_path = dataset_statistics_dir / Path(
             "participant_stats.csv"
         )
         time_series_dir = Path("data_copco/TimeSeriesData")
-        process_data_copco.process_fixation_reports(
+        process_data_copco.make_csvs(
             fixation_reports_dir=fixation_reports_dir,
+            min_n_fixations=5,
+            verbose=bool(verbose),
+            overwrite=overwrite,
+        )
+        process_data_copco.process_fixation_reports(
+            fixation_reports_by_trial_dir=fixation_reports_by_trial_dir,
             out_dir=time_series_dir,
             verbose=bool(verbose),
             overwrite=overwrite,
         )
         process_data_copco.get_labels(
             participants_stats_path=participants_stats_path,
-            out_dir=time_series_dir / "labels",
+            time_series_dir=time_series_dir,
             verbose=bool(verbose),
             overwrite=overwrite,
         )
