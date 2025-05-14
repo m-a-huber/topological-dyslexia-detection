@@ -32,7 +32,7 @@ def unzip_and_clean(
                 file_data = zip_ref.read(file)
                 csv_reader = csv.reader(io.StringIO(file_data.decode("utf-8")))
                 rows = list(csv_reader)
-                if len(rows) >= min_n_fixations:  # exclude header
+                if len(rows) >= min_n_fixations + 1:  # exclude header
                     out_path = fixation_reports_dir / filename
                     out_path.write_bytes(file_data)
     return
