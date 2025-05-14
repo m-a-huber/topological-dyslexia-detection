@@ -40,7 +40,7 @@ def get_data(
         np.load(time_series_path)
         for time_series_path in sorted(time_series_dir.glob("*.npy"))
     ]
-    y = np.load(time_series_dir / "labels" / "is_dyslexic.npy")
+    y = np.load(time_series_dir / "labels/is_dyslexic.npy")
     assert len(X) == len(y)
     return X, y
 
@@ -217,9 +217,7 @@ if __name__ == "__main__":
     corpus_name = sys.argv[1]  # one of "copco" and "reading_trials"
     overwrite = sys.argv[2] == "True"
 
-    n_splits = (
-        5 if corpus_name == "copco" else 10
-    )  # number of splits in StratifiedKFold
+    n_splits = 10  # number of splits in StratifiedKFold
     n_iter = 40  # number of iterations for BayesSearchCV
     n_points = 8  # number of parallel points for BayesSearchCV
     n_jobs = -1  # parallelism for BayesSearchCV
@@ -237,14 +235,9 @@ if __name__ == "__main__":
             "participant_stats.csv"
         )
         time_series_dir = Path("data_copco/TimeSeriesData")
-        process_data_copco.make_csvs(
+        process_data_copco.process_fixation_reports(
             fixation_reports_dir=fixation_reports_dir,
             min_n_fixations=5,
-            verbose=bool(verbose),
-            overwrite=overwrite,
-        )
-        process_data_copco.process_fixation_reports(
-            fixation_reports_by_trial_dir=fixation_reports_by_trial_dir,
             out_dir=time_series_dir,
             verbose=bool(verbose),
             overwrite=overwrite,
