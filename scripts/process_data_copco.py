@@ -78,12 +78,12 @@ def process_fixation_reports(
                 np.save(out_file, time_series_data)
                 if verbose:
                     tqdm.write(
-                        f"Saved processed fixation report to {out_dir}."
+                        f"Saved processed fixation report to {out_file}."
                     )
             else:
                 if verbose:
                     tqdm.write(
-                        f"Found processed fixation report at {out_dir}; not "
+                        f"Found processed fixation report at {out_file}; not "
                         "overwriting."
                     )
     return
