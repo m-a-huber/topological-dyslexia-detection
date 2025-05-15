@@ -191,9 +191,10 @@ def make_df(
         )
         table = []
         for row in rows:
-            row_dict = {"index": row}
+            row_dict = {"filtration": row}
             for col, values in df_dict.items():
-                row_dict[col] = values.get(row, None)
+                mean, std = values.get(row, None)
+                row_dict[col] = f"{mean}±{std}"
             table.append(row_dict)
         df_results = pl.DataFrame(table).sort(
             ["with_extended_persistence", "without_extended_persistence"],
@@ -361,8 +362,9 @@ if __name__ == "__main__":
                 )
             )
             tqdm.write(f"Finished {filtration_type}_{suffix}.")
-            df_dict[suffix][filtration_type] = np.around(
-                roc_scores.mean(), 4
+            df_dict[suffix][filtration_type] = (
+                np.around(roc_scores.mean(), 4),
+                np.around(roc_scores.std(), 4)
             )
     df = make_df(
         df_dict=df_dict,
