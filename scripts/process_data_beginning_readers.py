@@ -16,12 +16,12 @@ def unzip_and_clean(
 ) -> None:
     """Extracts those csv-files from data_dir/event_data_csv.zip that contain a
     fixation report that is at least `min_n_fixations` long and whose label
-    appears in `data_dir/slrt_results_new.csv`.
+    appears in `data_dir/slrt_results.csv`.
     """
     zip_path = data_dir / "event_data_csv.zip"
     if not fixation_reports_dir.is_dir():
         fixation_reports_dir.mkdir(parents=True, exist_ok=True)
-    df_participants = pl.read_csv(data_dir / "slrt_results_new.csv")
+    df_participants = pl.read_csv(data_dir / "slrt_results.csv")
     with zipfile.ZipFile(zip_path, "r") as zip_ref:
         for file in zip_ref.namelist():
             filestem = Path(file).stem
@@ -46,7 +46,7 @@ def get_time_series_data(
 
     Args:
         sp_path (Path): Path pointing to a scanpath-file in
-            "data_reading_trials/event_data_trial_1_csv".
+            "data_beginning_readers/event_data_trial_1_csv".
 
     Returns:
         numpy.ndarray: NumPy-array of shape (n_fixations, 3) where each row
@@ -71,19 +71,19 @@ def process_fixation_reports(
         desc="Processing fixation reports"
     ):
         id = sp_path.stem
-        out_file = out_dir / f"time_series_data_reading_trials_{id}.npy"
+        out_file = out_dir / f"time_series_data_beginning_readers_{id}.npy"
         if not out_file.is_file() or overwrite:
             out_file.parent.mkdir(exist_ok=True, parents=True)
             time_series_data = get_time_series_data(sp_path)
             np.save(out_file, time_series_data)
             if verbose:
                 tqdm.write(
-                    f"Saved processed fixation report to {out_dir}."
+                    f"Saved processed fixation report to {out_file}."
                 )
         else:
             if verbose:
                 tqdm.write(
-                    f"Found processed fixation report at {out_dir}; not "
+                    f"Found processed fixation report at {out_file}; not "
                     "overwriting."
                 )
     return
@@ -95,7 +95,7 @@ def get_labels(
     verbose: bool,
     overwrite: bool = False,
 ) -> None:
-    df_participants = pl.read_csv(data_dir / "slrt_results_new.csv")
+    df_participants = pl.read_csv(data_dir / "slrt_results.csv")
     out_file_dyslexic = time_series_dir / "labels/is_dyslexic.npy"
     if not out_file_dyslexic.is_file() or overwrite:
         is_dyslexic = []
