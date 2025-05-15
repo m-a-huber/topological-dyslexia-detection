@@ -21,8 +21,8 @@ from skopt.space import Categorical, Real  # type: ignore
 from tqdm import tqdm  # type: ignore
 
 from scripts import (  # type: ignore
+    process_data_beginning_readers,
     process_data_copco,
-    process_data_reading_trials,
 )
 from scripts.time_series_homology import TimeSeriesHomology  # type: ignore
 from scripts.utils import (  # type: ignore
@@ -214,7 +214,7 @@ def make_df(
 
 
 if __name__ == "__main__":
-    corpus_name = sys.argv[1]  # one of "copco" and "reading_trials"
+    corpus_name = sys.argv[1]  # one of "copco" and "beginning_readers"
     overwrite = sys.argv[2] == "True"
 
     n_splits = 10  # number of splits in StratifiedKFold
@@ -248,22 +248,22 @@ if __name__ == "__main__":
             verbose=bool(verbose),
             overwrite=overwrite,
         )
-    elif corpus_name == "reading_trials":
-        data_dir = Path("data_reading_trials")
-        fixation_reports_dir = Path("data_reading_trials/FixationReports")
-        time_series_dir = Path("data_reading_trials/TimeSeriesData")
-        process_data_reading_trials.unzip_and_clean(
+    elif corpus_name == "beginning_readers":
+        data_dir = Path("data_beginning_readers")
+        fixation_reports_dir = Path("data_beginning_readers/FixationReports")
+        time_series_dir = Path("data_beginning_readers/TimeSeriesData")
+        process_data_beginning_readers.unzip_and_clean(
             data_dir=data_dir,
             fixation_reports_dir=fixation_reports_dir,
             min_n_fixations=5,
         )
-        process_data_reading_trials.process_fixation_reports(
+        process_data_beginning_readers.process_fixation_reports(
             fixation_reports_dir=fixation_reports_dir,
             out_dir=time_series_dir,
             verbose=bool(verbose),
             overwrite=overwrite,
         )
-        process_data_reading_trials.get_labels(
+        process_data_beginning_readers.get_labels(
             data_dir=data_dir,
             time_series_dir=time_series_dir,
             verbose=bool(verbose),
@@ -272,7 +272,7 @@ if __name__ == "__main__":
     else:
         raise ValueError(
             "Got invalid value for `corpus_name`, must be one of `'copco'` "
-            "and `'reading_trials'`."
+            "and `'beginning_readers'`."
         )
 
     # Load data
