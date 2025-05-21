@@ -21,4 +21,4 @@ dev = [
 ]
 
 [tool.uv.sources]
-myplot = { path = "../myplot", editable = true }
+myplot = { path = "../myplot" }
