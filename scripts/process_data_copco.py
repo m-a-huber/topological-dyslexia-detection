@@ -7,6 +7,7 @@ from tqdm import tqdm  # type: ignore
 
 def process_fixation_reports(
     fixation_reports_dir: Path,
+    n_trials: int,
     min_n_fixations: int,
     out_dir: Path,
     verbose: bool,
@@ -50,7 +51,8 @@ def process_fixation_reports(
             ]
         )
         id = sp_path.stem.split("_")[-1]
-        for trial_ix in list(range(11, 21)):  # first 10 non-practice trials
+        # drop first 10 trials because those are practice trials
+        for trial_ix in list(range(11, 11 + n_trials)):
             df_trial = df_fixrep.filter(pl.col("TRIAL_INDEX") == trial_ix)
             if len(df_trial) < min_n_fixations:  # drop short trials
                 continue

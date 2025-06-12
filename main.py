@@ -238,6 +238,7 @@ if __name__ == "__main__":
         time_series_dir = Path("data_copco/TimeSeriesData")
         process_data_copco.process_fixation_reports(
             fixation_reports_dir=fixation_reports_dir,
+            n_trials=10,
             min_n_fixations=5,
             out_dir=time_series_dir,
             verbose=bool(verbose),
