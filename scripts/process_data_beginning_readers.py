@@ -4,7 +4,6 @@ import zipfile
 from pathlib import Path
 
 import numpy as np
-import numpy.typing as npt
 import polars as pl
 from tqdm import tqdm  # type: ignore
 
@@ -38,34 +37,14 @@ def unzip_and_clean(
     return
 
 
-def get_time_series_data(
-    sp_path: Path,
-) -> npt.NDArray:
-    """Creates NumPy-array containing x- and y-coordinates of a fixation and
-    its start time.
-
-    Args:
-        sp_path (Path): Path pointing to a scanpath-file in
-            "data_beginning_readers/event_data_trial_1_csv".
-
-    Returns:
-        numpy.ndarray: NumPy-array of shape (n_fixations, 3) where each row
-            contains (start time, x-coordinate, y-coordinate) of a fixation.
-    """
-    df_sp = pl.read_csv(sp_path).select([
-            "onset",
-            "x",
-            "y",
-        ])
-    return df_sp.to_numpy()
-
-
 def process_fixation_reports(
     fixation_reports_dir: Path,
     out_dir: Path,
     verbose: bool,
     overwrite: bool = False,
 ) -> None:
+    """Processes fixation reports and creates time series data from them.
+    """
     for sp_path in tqdm(
         sorted(fixation_reports_dir.glob("*.csv")),
         desc="Processing fixation reports"
@@ -74,7 +53,11 @@ def process_fixation_reports(
         out_file = out_dir / f"time_series_data_beginning_readers_{id}.npy"
         if not out_file.is_file() or overwrite:
             out_file.parent.mkdir(exist_ok=True, parents=True)
-            time_series_data = get_time_series_data(sp_path)
+            time_series_data = pl.read_csv(sp_path).select([
+                "onset",
+                "x",
+                "y",
+            ]).to_numpy()
             np.save(out_file, time_series_data)
             if verbose:
                 tqdm.write(

@@ -245,6 +245,7 @@ if __name__ == "__main__":
         )
         process_data_copco.get_labels(
             participants_stats_path=participants_stats_path,
+            label="dyslexic",
             time_series_dir=time_series_dir,
             verbose=bool(verbose),
             overwrite=overwrite,

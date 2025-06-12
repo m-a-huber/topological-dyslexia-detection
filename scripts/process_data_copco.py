@@ -12,6 +12,8 @@ def process_fixation_reports(
     verbose: bool,
     overwrite: bool = False,
 ) -> None:
+    """Processes fixation reports and creates time series data from them.
+    """
     for sp_path in tqdm(
         sorted(fixation_reports_dir.glob("*.txt")),
         desc="Processing fixation reports"
@@ -48,7 +50,7 @@ def process_fixation_reports(
             ]
         )
         id = sp_path.stem.split("_")[-1]
-        for trial_ix in list(range(1, 11)):  # take only first 10 trials
+        for trial_ix in list(range(11, 21)):  # first 10 non-practice trials
             df_trial = df_fixrep.filter(pl.col("TRIAL_INDEX") == trial_ix)
             if len(df_trial) < min_n_fixations:  # drop short trials
                 continue
@@ -91,41 +93,70 @@ def process_fixation_reports(
 
 def get_labels(
     participants_stats_path: Path,
+    label: str,
     time_series_dir: Path,
     verbose: bool,
     overwrite: bool = False,
 ) -> None:
-    def word_to_int(word):
-        if word == "yes":
-            return 1
-        if word == "no":
-            return 0
-        else:
-            raise ValueError(
-                "Invalid choice of `word`, must be one of `'yes'` and `'no`."
-            )
+    """Creates array of labels corresponding to the processed fixation reports.
+    Parameter `label` must be one of `'dyslexic'` and `'native'`.
+    """
     df_participants = pl.read_csv(participants_stats_path)
-    out_file_dyslexic = time_series_dir / "labels/is_dyslexic.npy"
-    if not out_file_dyslexic.is_file() or overwrite:
-        is_dyslexic = []
-        for time_series_file in sorted(time_series_dir.glob("*.npy")):
-            id = time_series_file.stem.split("_")[-2]
-            label = word_to_int(
-                df_participants.filter(pl.col("subj") == id)
-                .select("dyslexia")
-                .item()
-            )
-            is_dyslexic.append(label)
-        out_file_dyslexic.parent.mkdir(exist_ok=True, parents=True)
-        np.save(out_file_dyslexic, np.array(is_dyslexic, dtype=int))
-        if verbose:
-            tqdm.write(
-                f"Saved dyslexia labels to {out_file_dyslexic}."
-            )
+    if label == "dyslexic":
+        def _aux_fcn_dyslexic(s):
+            return int(s == "yes")
+        out_file_labels = time_series_dir / "labels/is_dyslexic.npy"
+        if not out_file_labels.is_file() or overwrite:
+            is_dyslexic = []
+            for time_series_file in sorted(time_series_dir.glob("*.npy")):
+                id = time_series_file.stem.split("_")[-2]
+                label = _aux_fcn_dyslexic(
+                    df_participants.filter(pl.col("subj") == id)
+                    .select("dyslexia")
+                    .item()
+                )
+                is_dyslexic.append(label)
+            out_file_labels.parent.mkdir(exist_ok=True, parents=True)
+            np.save(out_file_labels, np.array(is_dyslexic, dtype=int))
+            if verbose:
+                tqdm.write(
+                    f"Saved dyslexia labels to {out_file_labels}."
+                )
+        else:
+            if verbose:
+                tqdm.write(
+                    f"Found dyslexia labels at {out_file_labels}; "
+                    "not overwriting."
+                )
+    elif label == "native":
+        def _aux_fcn_native(s):
+            return int("danish" in s.lower())
+        out_file_labels = time_series_dir / "labels/is_native.npy"
+        if not out_file_labels.is_file() or overwrite:
+            is_native = []
+            for time_series_file in sorted(time_series_dir.glob("*.npy")):
+                id = time_series_file.stem.split("_")[-2]
+                label = _aux_fcn_native(
+                    df_participants.filter(pl.col("subj") == id)
+                    .select("native_language")
+                    .item()
+                )
+                is_native.append(label)
+            out_file_labels.parent.mkdir(exist_ok=True, parents=True)
+            np.save(out_file_labels, np.array(is_native, dtype=int))
+            if verbose:
+                tqdm.write(
+                    f"Saved nativeness labels to {out_file_labels}."
+                )
+        else:
+            if verbose:
+                tqdm.write(
+                    f"Found nativeness labels at {out_file_labels}; "
+                    "not overwriting."
+                )
     else:
-        if verbose:
-            tqdm.write(
-                f"Found dyslexia labels at {out_file_dyslexic}; "
-                "not overwriting."
-            )
+        raise ValueError(
+            "Invalid choice of `label`; must be one of `'dyslexic'` and "
+            "`'native'`."
+        )
     return
