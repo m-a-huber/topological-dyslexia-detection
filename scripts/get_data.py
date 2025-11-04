@@ -62,7 +62,7 @@ subjects_dys = [
 ]  # excluding P32 because no dyslexia screening result
 
 
-def get_data(
+def get_df(
     model_name: str,
     seed: Optional[int] = None,
 ) -> pl.DataFrame:
@@ -75,52 +75,26 @@ def get_data(
     if model_name == "tda":
         raise NotImplementedError()
     elif model_name == "bjornsdottir":
-        # Create df for non-dyslexic subjects
-        subject_dfs_non_dys = []
-        for subject in subjects_non_dys:
+        # Create df for all subjects
+        subject_dfs = []
+        for subject in subjects_non_dys + subjects_dys:
             extracted_features_path = Path(
                 f"./data_copco/ExtractedFeatures/P{subject}.csv"
             )
             df = pl.read_csv(extracted_features_path)
             df = df.fill_null(0)
-            df = df.with_columns(pl.lit(subject).alias("participantId"))
-            df = df.with_columns(pl.lit(0).alias("LABEL"))
-            subject_dfs_non_dys.append(df)
-        df_non_dys = pl.concat(subject_dfs_non_dys)
-        df_non_dys = df_non_dys.rename(
+            df = df.with_columns(pl.lit(subject).alias("READER_ID"))
+            # Set dyslexia label
+            label = 1 if subject in subjects_dys else 0
+            df = df.with_columns(pl.lit(label).alias("LABEL"))
+            subject_dfs.append(df)
+        df_all = pl.concat(subject_dfs)
+        df_all = df_all.rename(
             {
-                "participantId": "READER_ID",
                 "trialId": "TRIAL_ID",
             }
         )
-        df_non_dys = df_non_dys.with_columns(
-            pl.concat_str(
-                [
-                    "READER_ID",
-                    "TRIAL_ID",
-                ],
-                separator="-",
-            ).alias("SAMPLE_ID")
-        )
-        # Create df for dyslexic subjects
-        subject_dfs_dys = []
-        for subject in subjects_dys:
-            extracted_features_path = Path(
-                f"./data_copco/ExtractedFeatures/P{subject}.csv"
-            )
-            df = pl.read_csv(extracted_features_path)
-            df = df.fill_null(0)
-            df = df.with_columns(pl.lit(subject).alias("participantId"))
-            df = df.with_columns(pl.lit(1).alias("LABEL"))
-            subject_dfs_dys.append(df)
-        df_dys = pl.concat(subject_dfs_dys)
-        df_dys = df_dys.rename(
-            {
-                "participantId": "READER_ID",
-                "trialId": "TRIAL_ID",
-            }
-        )
-        df_dys = df_dys.with_columns(
+        df_all = df_all.with_columns(
             pl.concat_str(
                 [
                     "READER_ID",
@@ -130,6 +104,8 @@ def get_data(
             ).alias("SAMPLE_ID")
         )
         # Downsample dyslexic subjects
+        df_non_dys = df_all.filter(pl.col("LABEL") == 0)
+        df_dys = df_all.filter(pl.col("LABEL") == 1)
         max_number_of_samples = len(df_dys["SAMPLE_ID"].unique())
         df_non_dys_grouped = df_non_dys.group_by(
             "SAMPLE_ID", maintain_order=True
