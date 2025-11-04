@@ -73,7 +73,103 @@ def get_df(
     model.
     """
     if model_name == "tda":
-        raise NotImplementedError()
+        # Create df for all subjects
+        subject_dfs = []
+        for subject in subjects_non_dys + subjects_dys:
+            # Parse fixation report
+            fixation_report_path = Path(
+                f"./data_copco/FixationReports/FIX_report_P{subject}.txt"
+            )
+            with open(fixation_report_path, "r", encoding="utf-8-sig") as f_in:
+                header_line = f_in.readline()
+            header = [
+                col_name.strip('"')
+                for col_name in header_line.strip().split("\t")
+            ]
+            df_subject = pl.read_csv(
+                fixation_report_path,
+                separator="\t",
+                skip_lines=1,
+                quote_char=None,
+                infer_schema=False,
+                has_header=False,
+                new_columns=header,
+            )
+            # Create column containing reader ID
+            df_subject = df_subject.with_columns(
+                pl.lit(subject).alias("READER_ID")
+            )
+            # Create column containing label
+            label = 1 if subject in subjects_dys else 0
+            df_subject = df_subject.with_columns(pl.lit(label).alias("LABEL"))
+            # Create column with sample ID
+            df_subject = df_subject.rename(
+                {
+                    "TRIAL_INDEX": "TRIAL_ID",
+                }
+            )
+            df_subject = df_subject.with_columns(
+                pl.concat_str(
+                    [
+                        "READER_ID",
+                        "TRIAL_ID",
+                    ],
+                    separator="-",
+                ).alias("SAMPLE_ID"),
+            )
+            # Select relevant columns
+            df_subject = df_subject.select(
+                [
+                    "READER_ID",
+                    "LABEL",
+                    "TRIAL_ID",
+                    "SAMPLE_ID",
+                    "CURRENT_FIX_DURATION",
+                    "NEXT_SAC_DURATION",
+                    "CURRENT_FIX_X",
+                    "CURRENT_FIX_Y",
+                ]
+            )
+            # Cast columns to correct types
+            df_subject = df_subject.with_columns(
+                pl.col("READER_ID").cast(pl.Int64),
+                pl.col("LABEL").cast(pl.Int32),
+                pl.col("TRIAL_ID").cast(pl.Int64),
+                pl.col("CURRENT_FIX_DURATION").cast(pl.Float64),
+                pl.col("NEXT_SAC_DURATION")
+                .str.replace(".", "0")
+                .cast(pl.Float64),
+                pl.col("CURRENT_FIX_X").str.replace(",", ".").cast(pl.Float64),
+                pl.col("CURRENT_FIX_Y").str.replace(",", ".").cast(pl.Float64),
+            )
+            # Drop practice trials
+            df_subject = df_subject.filter(pl.col("TRIAL_ID") > 10)
+            # Create column containing start time of fixation
+            df_subject = df_subject.with_columns(
+                pl.concat(
+                    [
+                        pl.Series([0.0]),
+                        (
+                            df_subject["CURRENT_FIX_DURATION"]
+                            + df_subject["NEXT_SAC_DURATION"]
+                        ).cum_sum()[:-1],
+                    ]
+                ).alias("CURRENT_FIX_START")
+            )
+            df_subject = df_subject.rename(
+                {
+                    "CURRENT_FIX_START": "current_fix_start",
+                    "CURRENT_FIX_X": "current_fix_x",
+                    "CURRENT_FIX_Y": "current_fix_y",
+                }
+            )
+            df_subject = df_subject.drop(
+                "CURRENT_FIX_DURATION",
+                "NEXT_SAC_DURATION",
+            )
+            subject_dfs.append(df_subject)
+        df_out = pl.concat(subject_dfs)
+        return df_out
     elif model_name == "bjornsdottir":
         # Create df for all subjects
         subject_dfs = []
@@ -81,13 +177,15 @@ def get_df(
             extracted_features_path = Path(
                 f"./data_copco/ExtractedFeatures/P{subject}.csv"
             )
-            df = pl.read_csv(extracted_features_path)
-            df = df.fill_null(0)
-            df = df.with_columns(pl.lit(subject).alias("READER_ID"))
+            df_subject = pl.read_csv(extracted_features_path)
+            df_subject = df_subject.fill_null(0)
+            df_subject = df_subject.with_columns(
+                pl.lit(subject).alias("READER_ID")
+            )
             # Set dyslexia label
             label = 1 if subject in subjects_dys else 0
-            df = df.with_columns(pl.lit(label).alias("LABEL"))
-            subject_dfs.append(df)
+            df_subject = df_subject.with_columns(pl.lit(label).alias("LABEL"))
+            subject_dfs.append(df_subject)
         df_all = pl.concat(subject_dfs)
         df_all = df_all.rename(
             {
@@ -116,16 +214,14 @@ def get_df(
         # Combine dataframes
         df_all = pl.concat([df_non_dys_downsampled, df_dys])
         df_all = df_all.drop(
-            [
-                "word",
-                "char_IA_ids",
-                "part",
-                "wordId",
-                "sentenceId",
-                "speechId",
-                "paragraphId",
-                "landing_position",
-            ]
+            "word",
+            "char_IA_ids",
+            "part",
+            "wordId",
+            "sentenceId",
+            "speechId",
+            "paragraphId",
+            "landing_position",
         )
         df_all = df_all.with_columns(pl.col("READER_ID").cast(pl.Int64))
         # Create aggregated reading measures
@@ -140,14 +236,14 @@ def get_df(
                     pl.col(col).max().alias(f"max_{col}"),
                 ]
             )
-        df_aggregated = df_all.group_by(
+        df_out = df_all.group_by(
             ["READER_ID", "LABEL", "TRIAL_ID", "SAMPLE_ID"]
         ).agg(aggs)
-        assert df_aggregated.shape == df_aggregated.drop_nans().shape
-        df_aggregated = df_aggregated.sample(
-            fraction=1.0, shuffle=True, seed=seed
-        )
-        return df_aggregated
+        assert df_out.shape == df_out.drop_nans().shape
+        # Sort dataframe for reproducibility of final result
+        df_out = df_out.sort(["READER_ID", "LABEL", "TRIAL_ID", "SAMPLE_ID"])
+        df_out = df_out.sample(fraction=1.0, shuffle=True, seed=seed)
+        return df_out
     elif model_name == "raatikainen":
         data_dict = {
             "READER_ID": [],
@@ -168,7 +264,7 @@ def get_df(
                 col_name.strip('"')
                 for col_name in header_line.strip().split("\t")
             ]
-            df = pl.read_csv(
+            df_subject = pl.read_csv(
                 fixation_report_path,
                 separator="\t",
                 skip_lines=1,
@@ -177,8 +273,8 @@ def get_df(
                 has_header=False,
                 new_columns=header,
             )
-            # Pick relevant columns
-            df = df.select(
+            # Select relevant columns
+            df_subject = df_subject.select(
                 [
                     "TRIAL_INDEX",
                     "CURRENT_FIX_DURATION",
@@ -187,7 +283,7 @@ def get_df(
                 ]
             )
             # Cast columns to correct types
-            df = df.with_columns(
+            df_subject = df_subject.with_columns(
                 pl.col("TRIAL_INDEX").cast(pl.Int64),
                 pl.col("CURRENT_FIX_DURATION").cast(pl.Float64),
                 pl.col("NEXT_SAC_DURATION")
@@ -198,27 +294,31 @@ def get_df(
                 .str.replace(",", ".")
                 .cast(pl.Float64),
             )
+            # Drop practice trials
+            df_subject = df_subject.filter(pl.col("TRIAL_INDEX") > 10)
             # Set dyslexia label
             label = 1 if subject in subjects_dys else 0
             # Set values of data-dictionary
             data_dict["READER_ID"].append(int(subject))
             data_dict["LABEL"].append(label)
             data_dict["mean_fixation_duration"].append(
-                df["CURRENT_FIX_DURATION"].mean()
+                df_subject["CURRENT_FIX_DURATION"].mean()
             )
             data_dict["mean_saccade_duration"].append(
-                df["NEXT_SAC_DURATION"].mean()
+                df_subject["NEXT_SAC_DURATION"].mean()
             )
             data_dict["mean_saccade_amplitude"].append(
-                df["NEXT_SAC_AMPLITUDE"].mean()
+                df_subject["NEXT_SAC_AMPLITUDE"].mean()
             )
-            data_dict["total_fixation_count"].append(len(df))
-        df_aggregated = pl.from_dict(data_dict)
-        return df_aggregated
+            data_dict["total_fixation_count"].append(len(df_subject))
+        df_out = pl.from_dict(data_dict)
+        return df_out
+    elif model_name == "benfatto":
+        raise NotImplementedError()
     elif model_name == "haller":
         raise NotImplementedError()
     else:
         raise ValueError(
             "Invalid choice of `baseline_name`; must be one of `'tda'`, "
-            "`'bjornsdottir'`, `'raatikainen'` and `'haller'`."
+            "`'bjornsdottir'`, `'raatikainen'`, `'benfatto'` and `'haller'`."
         )
