@@ -133,7 +133,7 @@ def get_df(
             # Cast columns to correct types
             df_subject = df_subject.with_columns(
                 pl.col("READER_ID").cast(pl.Int64),
-                pl.col("LABEL").cast(pl.Int32),
+                pl.col("LABEL").cast(pl.Int64),
                 pl.col("TRIAL_ID").cast(pl.Int64),
                 pl.col("CURRENT_FIX_DURATION").cast(pl.Float64),
                 pl.col("NEXT_SAC_DURATION")
@@ -184,7 +184,9 @@ def get_df(
             )
             # Set dyslexia label
             label = 1 if subject in subjects_dys else 0
-            df_subject = df_subject.with_columns(pl.lit(label).alias("LABEL"))
+            df_subject = df_subject.with_columns(
+                pl.lit(label).cast(pl.Int64).alias("LABEL")
+            )
             subject_dfs.append(df_subject)
         df_all = pl.concat(subject_dfs)
         df_all = df_all.rename(
