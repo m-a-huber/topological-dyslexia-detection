@@ -51,16 +51,16 @@ def make_df(
     columns are `READER_ID`, `LABEL` and , possibly, `TRIAL_ID` and `SAMPLE_ID`
     (depending on the aggregation level of the corresponding model). The
     remaining columns contain the input data required for the corresponding
-    model. If `model_name` is set to `"tda"`, the `min_n_fixations` fixation
-    sequences of length less than `min_n_fixations` will be discarded.
+    model. If `model_name` is set to `"tda_experiment"`, the `min_n_fixations`
+    fixation sequences of length less than `min_n_fixations` will be discarded.
 
     Args:
-        model_name (str): Name of the model. Must be one of `'tda'`,
+        model_name (str): Name of the model. Must be one of `'tda_experiment'`,
             `'baseline_bjornsdottir'`, `'baseline_raatikainen'`,
             `'baseline_benfatto'` and `'baseline_haller'`.
         min_n_fixations (int): If greater than 1 and `model_name` is set to
-            `"tda"`, fixation sequences of length less than `min_n_fixations`
-            will be discarded. Ignored otherwise.
+            `"tda_experiment"`, fixation sequences of length less than
+            `min_n_fixations` will be discarded. Ignored otherwise.
         include_l2 (bool): Whether or not to include data from CopCo-subjects
             whose native language is not Danish (all of these subjects are
             non-dyslexic).
@@ -79,7 +79,7 @@ def make_df(
     if include_l2:
         subjects += constants.subjects_non_dys_l2
     if not df_out_path.exists() or overwrite:
-        if model_name == "tda":
+        if model_name == "tda_experiment":
             # Create df for all subjects
             subject_dfs = []
             for subject in subjects:
@@ -314,9 +314,10 @@ def make_df(
             raise NotImplementedError()
         else:
             raise ValueError(
-                "Invalid choice of `model_name`; must be one of `'tda'`, "
-                "`'baseline_bjornsdottir'`, `'baseline_raatikainen'`, "
-                "`'baseline_benfatto'` and `'baseline_haller'`."
+                "Invalid choice of `model_name`; must be one of "
+                "`'tda_experiment'`, `'baseline_bjornsdottir'`, "
+                "`'baseline_raatikainen'`, `'baseline_benfatto'` and "
+                "`'baseline_haller'`."
             )
         df_out_path.parent.mkdir(parents=True, exist_ok=True)
         df_out.write_csv(df_out_path)
