@@ -1,9 +1,9 @@
 from typing import Optional
 
-import gudhi as gd  # type: ignore
+import gudhi as gd
 import numpy as np
 import numpy.typing as npt
-from sklearn.base import BaseEstimator, TransformerMixin  # type: ignore
+from sklearn.base import BaseEstimator, TransformerMixin
 from typing_extensions import Self
 
 
@@ -61,17 +61,16 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
 
     def fit(
         self,
-        X: npt.NDArray,
-        y: Optional[None] = None,
+        X: npt.NDArray,  # noqa: ARG002
+        y: Optional[None] = None,  # noqa: ARG002
     ) -> Self:
-        """Does nothing, present here for API consistency with scikit-learn.
-        """
+        """Does nothing, present here for API consistency with scikit-learn."""
         return self
 
     def transform(
         self,
         X: list[npt.NDArray],
-        y: Optional[None] = None,
+        y: Optional[None] = None,  # noqa: ARG002
     ) -> list[list[list[list[npt.NDArray]]]]:
         """Computes persistent homology of a collection of (possibly
         multivariate) time series.
@@ -85,7 +84,7 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
                 scikit-learn.
 
         Returns:
-            list[list[list[list[npt.NDArray]]]]: A list containing a list of
+            list[list[list[list[npt.NDArray]]]]: A list containing lists of
                 lists of persistence diagrams of each time series, one for each
                 coordinate of the value of the time series. Each list of
                 persistence diagrams contains either three (if
@@ -153,10 +152,7 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
             dgms_formatted_lists = [
                 [
                     [
-                        [
-                            dim[np.isfinite(dim).all(axis=1)]
-                            for dim in dgm
-                        ]
+                        [dim[np.isfinite(dim).all(axis=1)] for dim in dgm]
                         for dgm in dgms
                     ]
                     for dgms in dgms_formatted_list
@@ -186,19 +182,16 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
         filtrations_vertices = self._get_vertex_filtrations(time_series)
         st.insert_batch(
             vertex_array=vertex_array_vertices,
-            filtrations=filtrations_vertices
+            filtrations=filtrations_vertices,
         )
-        vertex_array_edges = np.array([
-            [i, i + 1]
-            for i in range(len(time_series) - 1)
-        ]).T
+        vertex_array_edges = np.array(
+            [[i, i + 1] for i in range(len(time_series) - 1)]
+        ).T
         filtrations_edges = np.maximum(
-            filtrations_vertices[:-1],
-            filtrations_vertices[1:]
+            filtrations_vertices[:-1], filtrations_vertices[1:]
         )
         st.insert_batch(
-            vertex_array=vertex_array_edges,
-            filtrations=filtrations_edges
+            vertex_array=vertex_array_edges, filtrations=filtrations_edges
         )
         return st
 
@@ -206,83 +199,48 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
         if self.filtration_type == "horizontal":
             return time_series[:, 1]
         elif self.filtration_type == "sloped":
-            x_range = np.ptp(
-                time_series,
-                axis=0
-            )[1]
-            x_min = np.min(
-                time_series[:, 1]
+            x_range = np.ptp(time_series, axis=0)[1]
+            x_min = np.min(time_series[:, 1])
+            x_max = np.max(time_series[:, 1])
+
+            def _get_filtration(a):
+                # a is array of shape (2,) interpreted as containing t- and
+                # x-value of time series
+                aux = (a[1] - x_min) / (x_max - x_min)
+                return a[0] - ((aux - 0.5) / self.slope)
+
+            return np.apply_along_axis(
+                func1d=_get_filtration, axis=1, arr=time_series
             )
-            x_max = np.max(
-                time_series[:, 1]
+        elif self.filtration_type == "sigmoid":
+            x_range = np.ptp(time_series, axis=0)[1]
+            x_min = np.min(time_series[:, 1]) - self.padding_factor * x_range
+            x_max = np.max(time_series[:, 1]) + self.padding_factor * x_range
+
+            def _get_filtration(a):
+                # a is array of shape (2,) interpreted as containing t- and
+                # x-value of time series
+                aux = (a[1] - x_min) / (x_max - x_min)
+                return a[0] + (np.log((1 / aux) - 1) / (4 * self.slope))
+
+            return np.apply_along_axis(
+                func1d=_get_filtration, axis=1, arr=time_series
             )
+        elif self.filtration_type == "arctan":
+            x_range = np.ptp(time_series, axis=0)[1]
+            x_min = np.min(time_series[:, 1]) - self.padding_factor * x_range
+            x_max = np.max(time_series[:, 1]) + self.padding_factor * x_range
 
             def _get_filtration(a):
                 # a is array of shape (2,) interpreted as containing t- and
                 # x-value of time series
                 aux = (a[1] - x_min) / (x_max - x_min)
                 return a[0] - (
-                    (aux - 0.5)
-                    / self.slope
+                    np.tan(np.pi * (aux - 0.5)) / (np.pi * self.slope)
                 )
-            return np.apply_along_axis(
-                func1d=_get_filtration,
-                axis=1,
-                arr=time_series
-            )
-        elif self.filtration_type == "sigmoid":
-            x_range = np.ptp(
-                time_series,
-                axis=0
-            )[1]
-            x_min = np.min(
-                time_series[:, 1]
-            ) - self.padding_factor * x_range
-            x_max = np.max(
-                time_series[:, 1]
-            ) + self.padding_factor * x_range
 
-            def _get_filtration(a):
-                # a is array of shape (2,) interpreted as containing t- and
-                # x-value of time series
-                aux = (a[1] - x_min) / (x_max - x_min)
-                return (
-                    a[0] + (
-                        np.log((1 / aux) - 1)
-                        / (4 * self.slope)
-                    )
-                )
             return np.apply_along_axis(
-                func1d=_get_filtration,
-                axis=1,
-                arr=time_series
-            )
-        elif self.filtration_type == "arctan":
-            x_range = np.ptp(
-                time_series,
-                axis=0
-            )[1]
-            x_min = np.min(
-                time_series[:, 1]
-            ) - self.padding_factor * x_range
-            x_max = np.max(
-                time_series[:, 1]
-            ) + self.padding_factor * x_range
-
-            def _get_filtration(a):
-                # a is array of shape (2,) interpreted as containing t- and
-                # x-value of time series
-                aux = (a[1] - x_min) / (x_max - x_min)
-                return (
-                    a[0] - (
-                        np.tan(np.pi * (aux - 0.5))
-                        / (np.pi * self.slope)
-                    )
-                )
-            return np.apply_along_axis(
-                func1d=_get_filtration,
-                axis=1,
-                arr=time_series
+                func1d=_get_filtration, axis=1, arr=time_series
             )
         else:
             raise ValueError(
@@ -310,24 +268,26 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
                 with 0-dimensional homology and contains information from
                 consecutive homological dimensions.
         """
+
         def _sort_by_lifetime(dgm_formatted):
-            return dgm_formatted[np.argsort(
-                np.diff(dgm_formatted, axis=1).reshape(-1,)
-            )]
-        aux_array = np.array([
-            [dim, *birth_death_pair]
-            for dim, birth_death_pair in dgm
-        ]).reshape(-1, 3)
+            return dgm_formatted[
+                np.argsort(
+                    np.diff(dgm_formatted, axis=1).reshape(
+                        -1,
+                    )
+                )
+            ]
+
+        aux_array = np.array(
+            [[dim, *birth_death_pair] for dim, birth_death_pair in dgm]
+        ).reshape(-1, 3)
         max_dim = np.max(aux_array[:, 0]) if aux_array.size > 0 else -1
         if max_dim == -1:
-            return [
-                np.empty((0, 2), dtype=np.float64)
-            ]
+            return [np.empty((0, 2), dtype=np.float64)]
         else:
             dims = np.arange(max_dim + 1)
             dgm_formatted = [
-                aux_array[aux_array[:, 0] == dim][:, 1:]
-                for dim in dims
+                aux_array[aux_array[:, 0] == dim][:, 1:] for dim in dims
             ]
             dgm_formatted = list(map(_sort_by_lifetime, dgm_formatted))
             return dgm_formatted
