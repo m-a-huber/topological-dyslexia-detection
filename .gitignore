@@ -1,6 +1,10 @@
 __pycache__/
 .vscode
 .venv
-data*
-out_files*
+data_*/
+dataframes/
+outfiles/
 trash
+*.ipynb
+*.md
+!README.md
