@@ -40,25 +40,25 @@ def parse_fixation_report(
 
 
 def make_df(
-    model_name: str,
+    model_class: str,
     min_n_fixations: int,
     include_l2: bool,
     verbose: bool = True,
     overwrite: bool = False,
-    seed: Optional[int] = None,
 ) -> pl.DataFrame:
-    """Given a `model_name`, returns a `pl.DataFrame` whose first four
+    """Given a `model_class`, returns a `pl.DataFrame` whose first four
     columns are `READER_ID`, `LABEL` and , possibly, `TRIAL_ID` and `SAMPLE_ID`
     (depending on the aggregation level of the corresponding model). The
     remaining columns contain the input data required for the corresponding
-    model. If `model_name` is set to `"tda_experiment"`, the `min_n_fixations`
+    model. If `model_class` is set to `"tda_experiment"`, the `min_n_fixations`
     fixation sequences of length less than `min_n_fixations` will be discarded.
 
     Args:
-        model_name (str): Name of the model. Must be one of `'tda_experiment'`,
-            `'baseline_bjornsdottir'`, `'baseline_raatikainen'`,
-            `'baseline_benfatto'` and `'baseline_haller'`.
-        min_n_fixations (int): If greater than 1 and `model_name` is set to
+        model_class (str): Name of the model. Must be one of
+            `'tda_experiment'`, `'baseline_bjornsdottir'`,
+            `'baseline_raatikainen'`, `'baseline_benfatto'` and
+            `'baseline_haller'`.
+        min_n_fixations (int): If greater than 1 and `model_class` is set to
             `"tda_experiment"`, fixation sequences of length less than
             `min_n_fixations` will be discarded. Ignored otherwise.
         include_l2 (bool): Whether or not to include data from CopCo-subjects
@@ -74,12 +74,12 @@ def make_df(
     Returns:
         pl.DataFrame: Output dataframe.
     """
-    df_out_path = Path(f"./dataframes/dataframe_{model_name}.csv")
+    df_out_path = Path(f"./dataframes/dataframe_{model_class}.csv")
     subjects = constants.subjects_non_dys_l1 + constants.subjects_dys
     if include_l2:
         subjects += constants.subjects_non_dys_l2
     if not df_out_path.exists() or overwrite:
-        if model_name == "tda_experiment":
+        if model_class == "tda_experiment":
             # Create df for all subjects
             subject_dfs = []
             for subject in subjects:
@@ -172,7 +172,7 @@ def make_df(
                 df_out = df_out.filter(
                     pl.count("SAMPLE_ID").over("SAMPLE_ID") >= min_n_fixations
                 )
-        elif model_name == "baseline_bjornsdottir":
+        elif model_class == "baseline_bjornsdottir":
             # Create df for all subjects
             subject_dfs = []
             for subject in subjects:
@@ -253,8 +253,7 @@ def make_df(
             df_out = df_out.sort(
                 ["READER_ID", "LABEL", "TRIAL_ID", "SAMPLE_ID"]
             )
-            df_out = df_out.sample(fraction=1.0, shuffle=True, seed=seed)
-        elif model_name == "baseline_raatikainen":
+        elif model_class == "baseline_raatikainen":
             data_dict = {
                 "READER_ID": [],
                 "LABEL": [],
@@ -308,13 +307,13 @@ def make_df(
                 )
                 data_dict["total_fixation_count"].append(len(df_subject))
             df_out = pl.from_dict(data_dict)
-        elif model_name == "baseline_benfatto":
+        elif model_class == "baseline_benfatto":
             raise NotImplementedError()
-        elif model_name == "baseline_haller":
+        elif model_class == "baseline_haller":
             raise NotImplementedError()
         else:
             raise ValueError(
-                "Invalid choice of `model_name`; must be one of "
+                "Invalid choice of `model_class`; must be one of "
                 "`'tda_experiment'`, `'baseline_bjornsdottir'`, "
                 "`'baseline_raatikainen'`, `'baseline_benfatto'` and "
                 "`'baseline_haller'`."
@@ -323,14 +322,14 @@ def make_df(
         df_out.write_csv(df_out_path)
         if verbose:
             print(
-                f"Saved dataframe for model `'{model_name}'` to "
+                f"Saved dataframe for model `'{model_class}'` to "
                 f"`{df_out_path}`."
             )
     else:
         df_out = pl.read_csv(df_out_path)
         if verbose:
             print(
-                f"Found dataframe for model `'{model_name}'` at "
+                f"Found dataframe for model `'{model_class}'` at "
                 f"`{df_out_path}`; not overwriting."
             )
     return df_out
