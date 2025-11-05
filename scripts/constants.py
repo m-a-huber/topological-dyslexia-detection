@@ -18,6 +18,7 @@ subjects_non_dys_l1 = [
     "21",
     "22",
 ]  # 01, 13, 14, 17 excluded because of poor calibration or attention disorder
+
 subjects_non_dys_l2 = [
     "42",
     "43",
@@ -37,6 +38,7 @@ subjects_non_dys_l2 = [
     "57",
     "58",
 ]
+
 subjects_dys = [
     "23",
     "24",
@@ -57,3 +59,79 @@ subjects_dys = [
     "40",
     "41",
 ]  # P32 excluded because no dyslexia screening result
+
+hyperparams = {
+    "tda": {},
+    "baseline_bjornsdottir": {
+        "rf__n_estimators": [
+            1,
+            10,
+            100,
+            200,
+        ],
+        "rf__max_depth": [
+            1,
+            3,
+            5,
+            7,
+            9,
+        ],
+        "rf__max_features": [
+            "sqrt",
+            "log2",
+            # "auto",  # exclude because deprecated
+        ],
+    },
+    # Grids below were found in the code at
+    # https://gitlab.jyu.fi/nieminen/dyslexia-detection-public/
+    "baseline_raatikainen_rf": {
+        "rf__n_estimators": [
+            5,
+            20,
+            30,
+            50,
+            80,
+            100,
+            300,
+            500,
+            1000,
+            2000,
+        ],
+        "rf__max_features": [
+            2,
+            3,
+            4,
+            5,
+            6,
+            8,
+            10,
+            15,
+            20,
+        ],
+    },
+    "baseline_raatikainen_svm": {
+        "svc__C": [
+            1000,
+            2000,
+            3000,
+            5000,
+            7000,
+            10000,
+            20000,
+            50000,
+            100000,
+            500000,
+            1000000,
+        ],
+        "svc__gamma": [
+            0.00004,
+            0.00006,
+            0.00008,
+            0.0001,
+            0.0005,
+            0.001,
+            0.005,
+            0.01,
+        ],
+    },
+}
