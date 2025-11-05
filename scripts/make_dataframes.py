@@ -323,13 +323,14 @@ def make_df(
         df_out.write_csv(df_out_path)
         if verbose:
             print(
-                f"Saved dataframe for model '{model_name}' to `{df_out_path}`."
+                f"Saved dataframe for model `'{model_name}'` to "
+                f"`{df_out_path}`."
             )
     else:
         df_out = pl.read_csv(df_out_path)
         if verbose:
             print(
-                f"Found dataframe for model '{model_name}' at "
+                f"Found dataframe for model `'{model_name}'` at "
                 f"`{df_out_path}`; not overwriting."
             )
     return df_out
