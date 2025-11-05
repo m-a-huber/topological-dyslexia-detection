@@ -320,13 +320,33 @@ def main(
     ]
     tqdm.write(
         f"ROC AUC: {np.mean(roc_auc_means):.2f}\u00b1"
-        f"{np.std(roc_auc_means):.2f} (mean & SD across {args.n_repeats} "
+        f"{np.std(roc_auc_means):.2f} (mean & SD of {args.n_repeats} "
         "repetition means)"
     )
     tqdm.write(
         f"PR AUC : {np.mean(pr_auc_means):.2f}\u00b1"
-        f"{np.std(pr_auc_means):.2f} (mean & SD across {args.n_repeats} "
+        f"{np.std(pr_auc_means):.2f} (mean & SD of {args.n_repeats} "
         "repetition means)"
+    )
+    roc_aucs_all = [
+        roc_auc
+        for idx_repeat in range(args.n_repeats)
+        for roc_auc in result_dict[f"repeat {idx_repeat}"]["roc_aucs"]
+    ]
+    pr_aucs_all = [
+        pr_auc
+        for idx_repeat in range(args.n_repeats)
+        for pr_auc in result_dict[f"repeat {idx_repeat}"]["pr_aucs"]
+    ]
+    tqdm.write(
+        f"ROC AUC: {np.mean(roc_aucs_all):.2f}\u00b1"
+        f"{np.std(roc_aucs_all):.2f} (mean & SD across all "
+        f"{args.n_splits_train_test * args.n_repeats} folds)"
+    )
+    tqdm.write(
+        f"PR AUC : {np.mean(pr_aucs_all):.2f}\u00b1"
+        f"{np.std(pr_aucs_all):.2f} (mean & SD across all "
+        f"{args.n_splits_train_test * args.n_repeats} folds)"
     )
     return
 
