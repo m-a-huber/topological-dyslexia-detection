@@ -74,7 +74,7 @@ def make_df(
     Returns:
         pl.DataFrame: Output dataframe.
     """
-    df_out_path = Path(f"./dataframes/dataframe_{model_class}.csv")
+    df_out_path = Path(f"./dataframes/dataframe_{model_class}.json")
     subjects = constants.subjects_non_dys_l1 + constants.subjects_dys
     if include_l2:
         subjects += constants.subjects_non_dys_l2
@@ -167,11 +167,24 @@ def make_df(
                     "NEXT_SAC_DURATION",
                 )
                 subject_dfs.append(df_subject)
-            df_out = pl.concat(subject_dfs)
+            df_all = pl.concat(subject_dfs)
+            # Drop samples containing too few fixations
             if min_n_fixations > 1:
-                df_out = df_out.filter(
+                df_all = df_all.filter(
                     pl.count("SAMPLE_ID").over("SAMPLE_ID") >= min_n_fixations
                 )
+            # Combine x-, y- and t-coordinate of fixations into time series
+            df_out = (
+                df_all.sort("current_fix_start")
+                .group_by(["READER_ID", "LABEL", "TRIAL_ID", "SAMPLE_ID"])
+                .agg(
+                    pl.concat_list(
+                        ["current_fix_start", "current_fix_x", "current_fix_y"]
+                    ).alias("time_series")
+                )
+            )
+            # Verify that number of rows is correct
+            assert len(df_out) == df_all["SAMPLE_ID"].unique().len()
         elif model_class == "baseline_bjornsdottir":
             # Create df for all subjects
             subject_dfs = []
@@ -319,14 +332,14 @@ def make_df(
                 "`'baseline_haller'`."
             )
         df_out_path.parent.mkdir(parents=True, exist_ok=True)
-        df_out.write_csv(df_out_path)
+        df_out.write_json(df_out_path)
         if verbose:
             print(
                 f"Saved dataframe for model `'{model_class}'` to "
                 f"`{df_out_path}`."
             )
     else:
-        df_out = pl.read_csv(df_out_path)
+        df_out = pl.read_json(df_out_path)
         if verbose:
             print(
                 f"Found dataframe for model `'{model_class}'` at "
