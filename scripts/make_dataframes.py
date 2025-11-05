@@ -2,84 +2,87 @@ from pathlib import Path
 from typing import Optional
 
 import polars as pl
+from sklearn.model_selection import (
+    StratifiedKFold,
+    train_test_split,
+)
 
-subjects_non_dys = [
-    "02",
-    "03",
-    "04",
-    "05",
-    "06",
-    "07",
-    "08",
-    "09",
-    "10",
-    "11",
-    "12",
-    "15",
-    "16",
-    "18",
-    "19",
-    "20",
-    "21",
-    "22",
-    "42",  # this and following are L2
-    "43",
-    "44",
-    "45",
-    "46",
-    "47",
-    "48",
-    "49",
-    "50",
-    "51",
-    "52",
-    "53",
-    "54",
-    "55",
-    "56",
-    "57",
-    "58",
-]  # 01, 13, 14, 17 excluded because of POOR calibration or attention disorder
-subjects_dys = [
-    "23",
-    "24",
-    "25",
-    "26",
-    "27",
-    "28",
-    "29",
-    "30",
-    "31",
-    "33",
-    "34",
-    "35",
-    "36",
-    "37",
-    "38",
-    "39",
-    "40",
-    "41",
-]  # excluding P32 because no dyslexia screening result
+from scripts import constants
 
 
-def get_df(
-    baseline_name: str,
-    seed: Optional[int] = None,
+def parse_fixation_report(
+    fixation_report_path: Path,
+) -> pl.DataFrame:
+    """Creates a dataframe from a fixation report given as in the directory
+    `FixationReports` of CopCo.
+
+    Args:
+        fixation_report_path (Path): Path to the fixation report to parse.
+
+    Returns:
+        pl.DataFrame: Dataframe containing the data from the fixation report.
+    """
+    with open(fixation_report_path, "r", encoding="utf-8-sig") as f_in:
+        header_line = f_in.readline()
+    header = [
+        col_name.strip('"') for col_name in header_line.strip().split("\t")
+    ]
+    df = pl.read_csv(
+        fixation_report_path,
+        separator="\t",
+        skip_lines=1,
+        quote_char=None,
+        infer_schema=False,
+        has_header=False,
+        new_columns=header,
+    )
+    return df
+
+
+def make_df(
+    model_name: str,
+    min_n_fixations: int,
+    include_l2: bool,
     verbose: bool = True,
     overwrite: bool = False,
+    seed: Optional[int] = None,
 ) -> pl.DataFrame:
-    """Given a `baseline_name`, returns a `pl.DataFrame` whose first four
+    """Given a `model_name`, returns a `pl.DataFrame` whose first four
     columns are `READER_ID`, `LABEL` and , possibly, `TRIAL_ID` and `SAMPLE_ID`
     (depending on the aggregation level of the corresponding model). The
     remaining columns contain the input data required for the corresponding
-    model.
+    model. If `model_name` is set to `"tda"`, the `min_n_fixations` fixation
+    sequences of length less than `min_n_fixations` will be discarded.
+
+    Args:
+        model_name (str): Name of the model. Must be one of `'tda'`,
+            `'baseline_bjornsdottir'`, `'baseline_raatikainen'`,
+            `'baseline_benfatto'` and `'baseline_haller'`.
+        min_n_fixations (int): If greater than 1 and `model_name` is set to
+            `"tda"`, fixation sequences of length less than `min_n_fixations`
+            will be discarded. Ignored otherwise.
+        include_l2 (bool): Whether or not to include data from CopCo-subjects
+            whose native language is not Danish (all of these subjects are
+            non-dyslexic).
+        verbose (bool, optional): Whether or not to produce verbose output.
+            Defaults to True.
+        overwrite (bool, optional): Whether or not to overwrite existing output
+            files. Defaults to False.
+        seed (Optional[int], optional): Random seed for reproducibility.
+            Defaults to None.
+
+    Returns:
+        pl.DataFrame: Output dataframe.
     """
-    df_out_path = Path(f"./dataframes/dataframe_baseline_{baseline_name}.csv")
+    df_out_path = Path(f"./dataframes/dataframe_{model_name}.csv")
+    subjects = constants.subjects_non_dys_l1 + constants.subjects_dys
+    if include_l2:
+        subjects += constants.subjects_non_dys_l2
     if not df_out_path.exists() or overwrite:
-        if baseline_name == "tda":
+        if model_name == "tda":
             # Create df for all subjects
             subject_dfs = []
-            for subject in subjects_non_dys + subjects_dys:
+            for subject in subjects:
                 # Parse fixation report
                 fixation_report_path = Path(
                     f"./data_copco/FixationReports/FIX_report_P{subject}.txt"
@@ -90,7 +93,7 @@ def get_df(
                     pl.lit(subject).alias("READER_ID")
                 )
                 # Create column containing label
-                label = 1 if subject in subjects_dys else 0
+                label = 1 if subject in constants.subjects_dys else 0
                 df_subject = df_subject.with_columns(
                     pl.lit(label).alias("LABEL")
                 )
@@ -165,10 +168,14 @@ def get_df(
                 )
                 subject_dfs.append(df_subject)
             df_out = pl.concat(subject_dfs)
-        elif baseline_name == "bjornsdottir":
+            if min_n_fixations > 1:
+                df_out = df_out.filter(
+                    pl.count("SAMPLE_ID").over("SAMPLE_ID") >= min_n_fixations
+                )
+        elif model_name == "baseline_bjornsdottir":
             # Create df for all subjects
             subject_dfs = []
-            for subject in subjects_non_dys + subjects_dys:
+            for subject in subjects:
                 extracted_features_path = Path(
                     f"./data_copco/ExtractedFeatures/P{subject}.csv"
                 )
@@ -178,7 +185,7 @@ def get_df(
                     pl.lit(subject).alias("READER_ID")
                 )
                 # Set dyslexia label
-                label = 1 if subject in subjects_dys else 0
+                label = 1 if subject in constants.subjects_dys else 0
                 df_subject = df_subject.with_columns(
                     pl.lit(label).cast(pl.Int64).alias("LABEL")
                 )
@@ -247,7 +254,7 @@ def get_df(
                 ["READER_ID", "LABEL", "TRIAL_ID", "SAMPLE_ID"]
             )
             df_out = df_out.sample(fraction=1.0, shuffle=True, seed=seed)
-        elif baseline_name == "raatikainen":
+        elif model_name == "baseline_raatikainen":
             data_dict = {
                 "READER_ID": [],
                 "LABEL": [],
@@ -256,7 +263,7 @@ def get_df(
                 "mean_saccade_amplitude": [],
                 "total_fixation_count": [],
             }
-            for subject in subjects_non_dys + subjects_dys:
+            for subject in subjects:
                 # Parse fixation report
                 fixation_report_path = Path(
                     f"./data_copco/FixationReports/FIX_report_P{subject}.txt"
@@ -286,7 +293,7 @@ def get_df(
                 # Drop practice trials
                 df_subject = df_subject.filter(pl.col("TRIAL_INDEX") > 10)
                 # Set dyslexia label
-                label = 1 if subject in subjects_dys else 0
+                label = 1 if subject in constants.subjects_dys else 0
                 # Set values of data-dictionary
                 data_dict["READER_ID"].append(int(subject))
                 data_dict["LABEL"].append(label)
@@ -301,51 +308,106 @@ def get_df(
                 )
                 data_dict["total_fixation_count"].append(len(df_subject))
             df_out = pl.from_dict(data_dict)
-        elif baseline_name == "benfatto":
+        elif model_name == "baseline_benfatto":
             raise NotImplementedError()
-        elif baseline_name == "haller":
+        elif model_name == "baseline_haller":
             raise NotImplementedError()
         else:
             raise ValueError(
-                "Invalid choice of `baseline_name`; must be one of `'tda'`, "
-                "`'bjornsdottir'`, `'raatikainen'`, `'benfatto'` and "
-                "`'haller'`."
+                "Invalid choice of `model_name`; must be one of `'tda'`, "
+                "`'baseline_bjornsdottir'`, `'baseline_raatikainen'`, "
+                "`'baseline_benfatto'` and `'baseline_haller'`."
             )
         df_out_path.parent.mkdir(parents=True, exist_ok=True)
         df_out.write_csv(df_out_path)
         if verbose:
             print(
-                f"Saved dataframe for baseline '{baseline_name}' to "
-                f"`{df_out_path}`."
+                f"Saved dataframe for model '{model_name}' to `{df_out_path}`."
             )
     else:
         df_out = pl.read_csv(df_out_path)
         if verbose:
             print(
-                f"Found dataframe for baseline '{baseline_name}' at "
+                f"Found dataframe for model '{model_name}' at "
                 f"`{df_out_path}`; not overwriting."
             )
     return df_out
 
 
-def parse_fixation_report(
-    fixation_report_path: Path,
-) -> pl.DataFrame:
-    """Creates a dataframe from a fixation report as in the directory
-    FixationReports of the CopCo.
+def get_dfs_splits(
+    df: pl.DataFrame,
+    percentage_val_split: float,
+    n_splits_train_test: int,
+    check_dfs: bool = False,
+    random_state: Optional[int] = None,
+) -> tuple[pl.DataFrame, list[pl.DataFrame]]:
+    """Given a dataframe produced by `make_dataframes.make_df`, this function
+    first determines a validation split of the dataframe, and then
+    splits the portion into `n_splits_train_test` splits. These are such that
+    the validation split contains the data from roughly `percentage_val_split`
+    percents of all readers, and such that each subsequent split contains
+    roughly an equal number of unique reader IDs. Both of these procedures are
+    done in a stratified fashion, so that both the validation split as well as
+    each of the subsequent splits contain roughly the same proportion of reader
+    IDs corresponding to a reader with dyslexia. Moreover, it is such that
+    every reader ID appears in precisely one split.
+
+    Args:
+        df (pl.DataFrame): Input dataframe.
+        percentage_val_split (float): Percentage of reader IDs to appear in the
+            validation split.
+        n_splits_train_test (int): Number of splits to create from
+            non-validation data.
+        check_dfs (bool, optional): Whether or not to explicitly verify that
+            each reader ID appears in exactly one split. Defaults to False.
+        random_state (Optional[int], optional): Random seed for
+            reproducibility. Defaults to None.
+
+    Returns:
+        tuple[pl.DataFrame, list[pl.DataFrame]]: Tuple containing the datafram
+            corresponding to the validation split, and a list containing the
+            dataframes corresponding to each subsequent split.
     """
-    with open(fixation_report_path, "r", encoding="utf-8-sig") as f_in:
-        header_line = f_in.readline()
-    header = [
-        col_name.strip('"') for col_name in header_line.strip().split("\t")
-    ]
-    df = pl.read_csv(
-        fixation_report_path,
-        separator="\t",
-        skip_lines=1,
-        quote_char=None,
-        infer_schema=False,
-        has_header=False,
-        new_columns=header,
+    # Select relevant sub-dataframe
+    df_reader_ids_labels = df.select(
+        pl.col("READER_ID"), pl.col("LABEL")
+    ).unique(maintain_order=True)
+    # Create validation split
+    df_aux_train_test, df_aux_val = train_test_split(
+        df_reader_ids_labels,
+        test_size=percentage_val_split,
+        stratify=df_reader_ids_labels["LABEL"],
+        random_state=random_state,
     )
-    return df
+    # Create splits of non-validation data
+    skf = StratifiedKFold(
+        n_splits=n_splits_train_test,
+        shuffle=True,
+        random_state=42,
+    )
+    dfs_aux_train_test = [
+        df_aux_train_test[split_idxs]
+        for _, split_idxs in skf.split(
+            df_aux_train_test, df_aux_train_test["LABEL"]
+        )
+    ]
+    reader_ids_val = df_aux_val["READER_ID"]
+    reader_idss_train_test = [
+        df_aux_train_test["READER_ID"]
+        for df_aux_train_test in dfs_aux_train_test
+    ]
+    df_val = df.filter(pl.col("READER_ID").is_in(reader_ids_val))
+    dfs_train_test = [
+        df.filter(pl.col("READER_ID").is_in(reader_ids_train_test))
+        for reader_ids_train_test in reader_idss_train_test
+    ]
+    if check_dfs:  # Checks that no reader appears in more than one split
+        dfs_all = [df_val, *dfs_train_test]
+        reader_ids_sets = [set(df["READER_ID"].unique()) for df in dfs_all]
+        assert set().union(*reader_ids_sets) == set(
+            df["READER_ID"].unique()
+        ), "At least one reader ID appears in no split."
+        assert len(set().union(*reader_ids_sets)) == sum(
+            len(s) for s in reader_ids_sets
+        ), "At least one reader ID appears in more than one split."
+    return df_val, dfs_train_test
