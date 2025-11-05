@@ -291,9 +291,7 @@ def main(
             result_dict[f"repeat {idx_repeat}"]["pr_auc_mean"] = np.mean(
                 pr_aucs
             )
-            result_dict[f"repeat {idx_repeat}"]["pr_auc_std"] = np.std(
-                pr_aucs
-            )
+            result_dict[f"repeat {idx_repeat}"]["pr_auc_std"] = np.std(pr_aucs)
         result_file_path.parent.mkdir(parents=True, exist_ok=True)
         with open(result_file_path, "w") as f_out:
             json.dump(result_dict, f_out, indent=2)
