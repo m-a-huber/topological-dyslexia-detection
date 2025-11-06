@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.stats import rv_continuous
 from sklearn.base import (  # type: ignore
     BaseEstimator,
     TransformerMixin,
@@ -11,6 +12,21 @@ def weight_abs1p(pt):
     persistence diagram by lifetime plus 1.
     """
     return np.abs(pt[1]) + 1
+
+
+class UniformSlope(rv_continuous):
+    """Helper class to sample slopes of lines through the origin such that they
+    are uniform with respect to angle."""
+
+    def __init__(self, min_slope=-2, max_slope=2, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.theta_min = np.arctan(min_slope)
+        self.theta_max = np.arctan(max_slope)
+
+    def _rvs(self, size=None, random_state=None):
+        rng = np.random.default_rng(random_state)
+        theta = rng.uniform(self.theta_min, self.theta_max, size=size)
+        return np.tan(theta)
 
 
 class ListTransformer(BaseEstimator, TransformerMixin):
@@ -35,8 +51,10 @@ class ListTransformer(BaseEstimator, TransformerMixin):
 
 
 class PersistenceProcessor(BaseEstimator, TransformerMixin):
-    """Transforms output of TimeSeriesHomology into a format suitable for
-    subsequent creation of persistence images.
+    """Helper class that transforms output of TimeSeriesHomology into a format
+    suitable for subsequent creation of persistence images by prudcing a list
+    of lists of NumPy-arrays of the form
+    `(n_samples, n_dgms_per_sample, n_gens_of_dgm, 2)`.
     """
 
     def __init__(self):
@@ -63,7 +81,7 @@ class PersistenceProcessor(BaseEstimator, TransformerMixin):
 
 
 class PersistenceImageProcessor(BaseEstimator, TransformerMixin):
-    """MinMax-scales the pixel values of the persistence images and
+    """Helper class that scales the pixel values of the persistence images and
     concatenates the flattened images corresponding to one sample.
     """
 
