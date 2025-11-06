@@ -1,23 +1,40 @@
 import argparse
 import json
+import os
+
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+
 from collections import defaultdict
 from pathlib import Path
+from typing import Optional
 
+import gudhi.representations as gdrep
 import numpy as np
 import numpy.typing as npt
 import polars as pl
+from sklearn.decomposition import PCA
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import average_precision_score, roc_auc_score
 from sklearn.model_selection import (
     GridSearchCV,
     PredefinedSplit,
+    RandomizedSearchCV,
 )
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.svm import SVC
+from threadpoolctl import threadpool_limits
 from tqdm import tqdm
 
 from scripts import constants, make_dataframes
+from scripts.time_series_homology import TimeSeriesHomology
+from scripts.utils import (
+    ListTransformer,
+    PersistenceImageProcessor,
+    PersistenceProcessor,
+)
 
 
 def parse_args():
@@ -28,7 +45,8 @@ def parse_args():
             return int(value)
         except ValueError:
             raise argparse.ArgumentTypeError(
-                f"Invalid value for seed: {value}"
+                "Invalid value for seed; seed must be either an integer or "
+                f"None, but got {value} instead."
             )
 
     parser = argparse.ArgumentParser(
@@ -41,7 +59,7 @@ def parse_args():
         default=5,
         help=(
             "Minimum number of fixation for a trial not to be discarded "
-            "(ignored unless `model_name` is 'tda_experiment')"
+            "(ignored when running baseline models)"
         ),
     )
     parser.add_argument(
@@ -49,8 +67,7 @@ def parse_args():
         dest="use_extended_persistence",
         action="store_true",
         help=(
-            "Use extended persistence (ignored unless `model_name` is "
-            "'tda_experiment')"
+            "Use extended persistence (ignored when running baseline models)"
         ),
     )
     parser.add_argument(
@@ -58,8 +75,8 @@ def parse_args():
         dest="use_extended_persistence",
         action="store_false",
         help=(
-            "Do not use extended persistence (ignored unless `model_name` is "
-            "'tda_experiment')"
+            "Do not use extended persistence (ignored when running baseline "
+            "models)"
         ),
     )
     parser.add_argument(
@@ -93,6 +110,15 @@ def parse_args():
         help=("Number of splits to break up non-validation data into"),
     )
     parser.add_argument(
+        "--n-iter",
+        type=int,
+        default=75,
+        help=(
+            "Number of iterations for randomized hyperparameter search "
+            "(ignored when running baseline models)"
+        ),
+    )
+    parser.add_argument(
         "--n-jobs",
         type=int,
         default=1,
@@ -118,25 +144,28 @@ def parse_args():
         help="Seed for reproducibility (int or None)",
     )
     parser.set_defaults(include_l2=True)
+    parser.set_defaults(use_extended_persistence=False)
     return parser.parse_args()
 
 
 def validate_model_name(model_name: str) -> None:
     """Validates the model name provided."""
+    if not model_name:
+        raise ValueError(
+            "No model name was provided."
+        )
     if model_name.startswith("tda_experiment"):
         parts = model_name.split("_")
-        filtration_type, persistence_type = parts[-2:]
+        filtration_type = parts[-1]
         if not (
-            len(parts) == 4
+            len(parts) == 3
             and filtration_type
             in constants.admissible_filtration_types_tda_experiment
-            and persistence_type
-            in constants.admissible_persistence_types_tda_experiment
         ):
             raise ValueError(
                 "Invalid model name for TDA-experiment; model name must be of "
-                "the form 'tda_experiment_<filtration_type>_"
-                f"<extended|ordinary>', but got {model_name} instead."
+                "the form 'tda_experiment_<filtration_type>', but got "
+                f"{model_name} instead."
             )
     elif model_name.startswith("baseline_bjornsdottir"):
         if model_name != "baseline_bjornsdottir":
@@ -159,8 +188,8 @@ def validate_model_name(model_name: str) -> None:
     else:
         raise ValueError(
             "Invalid choice of `model_name`; must be one of "
-            "`'tda_experiment_<filtration_type>_<extended|ordinary>'`, "
-            "`'baseline_bjornsdottir'`, and `'baseline_raatikainen_<rf|svc>'`."
+            "`'tda_experiment_<filtration_type>'`, `'baseline_bjornsdottir'`, "
+            "and `'baseline_raatikainen_<rf|svc>'`."
         )
 
 
@@ -172,7 +201,10 @@ def get_best_params(
     pipeline: Pipeline,
     hyperparams: dict[str, list[float]],
     scoring: str,
+    search_kind: str,  # either 'grid' or 'random'
+    n_iter: int,  # no. of iterations for randomized search
     n_jobs: int,
+    random_state: Optional[int],
 ) -> dict[str, list[float]]:
     """Function performing grid search to tune model parameters by training on
     `X_train` and evaluating on `X_val` for all possible combinations of
@@ -186,20 +218,46 @@ def get_best_params(
             ]
         )
     )
-    grid = GridSearchCV(
-        pipeline,
-        hyperparams,
-        cv=ps,
-        scoring=scoring,
-        n_jobs=n_jobs,
-        refit=True,
-    )
-    X_train_val, y_train_val = (
-        np.concatenate([X_train, X_val]),
-        np.concatenate([y_train, y_val]),
-    )
-    grid.fit(X_train_val, y_train_val)
-    return grid.best_params_
+    if search_kind == "grid":
+        search = GridSearchCV(
+            pipeline,
+            hyperparams,
+            cv=ps,
+            scoring=scoring,
+            n_jobs=n_jobs,
+            refit=False,
+        )
+        try:
+            X_train_val = np.concatenate([X_train, X_val])
+        except ValueError:
+            X_train_val = X_train + X_val
+        y_train_val = np.concatenate([y_train, y_val])
+        with threadpool_limits(limits=1):
+            search.fit(X_train_val, y_train_val)
+    elif search_kind == "random":
+        search = RandomizedSearchCV(
+            pipeline,
+            hyperparams,
+            n_iter=n_iter,
+            cv=ps,
+            scoring=scoring,
+            n_jobs=n_jobs,
+            refit=False,
+            random_state=random_state,
+        )
+        try:
+            X_train_val = np.concatenate([X_train, X_val])
+        except ValueError:
+            X_train_val = X_train + X_val
+        y_train_val = np.concatenate([y_train, y_val])
+        with threadpool_limits(limits=1):
+            search.fit(X_train_val, y_train_val)
+    else:
+        raise ValueError(
+            "Invalid value for `search_kind`; `search_kind` must be either "
+            f"`'grid'` or `'random'`, but got {search_kind} instead."
+        )
+    return search.best_params_
 
 
 def main(
@@ -213,9 +271,64 @@ def main(
     )
     if not result_file_path.exists() or args.overwrite:
         if args.model_name.startswith("tda_experiment"):
-            raise NotImplementedError()  # TODO
+            model_class = "tda_experiment"
+            filtration_type, persistence_type = args.model_name.split("_")[-2:]
+            use_extended_persistence = persistence_type == "extended"
+            hyperparams = constants.hyperparams[
+                "_".join([model_class, filtration_type])
+            ]
+            search_kind = "random"
+            pipeline = Pipeline(
+                [
+                    (
+                        "time_series_scaler",
+                        ListTransformer(
+                            base_estimator=MinMaxScaler(feature_range=(0, 1))
+                        ),
+                    ),
+                    (
+                        "time_series_homology",
+                        TimeSeriesHomology(
+                            filtration_type=filtration_type,
+                            use_extended_persistence=use_extended_persistence,
+                            drop_inf_persistence=not use_extended_persistence,
+                        ),
+                    ),
+                    ("persistence_processor", PersistenceProcessor()),
+                    (
+                        "persistence_imager",
+                        ListTransformer(
+                            gdrep.PersistenceImage(
+                                resolution=(50, 50),
+                            )
+                        ),
+                    ),
+                    (
+                        "persistence_image_scaler",
+                        PersistenceImageProcessor(feature_range=(0, 1)),
+                    ),
+                    (
+                        "pca",
+                        PCA(
+                            svd_solver="randomized",
+                            whiten=True,
+                            n_components=250,
+                            random_state=rng.integers(low=0, high=2**32),
+                        ),
+                    ),
+                    (
+                        "svc",
+                        SVC(
+                            probability=True,
+                            random_state=rng.integers(low=0, high=2**32),
+                        ),
+                    ),
+                ]
+            )
         elif args.model_name == "baseline_bjornsdottir":
             model_class = "baseline_bjornsdottir"
+            hyperparams = constants.hyperparams[args.model_name]
+            search_kind = "grid"
             pipeline = Pipeline(
                 [
                     (
@@ -232,10 +345,11 @@ def main(
                     ),
                 ]
             )
-            hyperparams = constants.hyperparams[args.model_name]
         elif args.model_name.startswith("baseline_raatikainen"):
             model_class = "baseline_raatikainen"
             model_kind = args.model_name.split("_")[-1]
+            hyperparams = constants.hyperparams[args.model_name]
+            search_kind = "grid"
             if model_kind == "rf":
                 pipeline = Pipeline(
                     [
@@ -271,7 +385,6 @@ def main(
                         ),
                     ]
                 )
-            hyperparams = constants.hyperparams[args.model_name]
         df = make_dataframes.make_df(
             model_class=model_class,
             min_n_fixations=args.min_n_fixations,
@@ -291,7 +404,12 @@ def main(
                 random_state=rng.integers(low=0, high=2**32),
             )
             roc_aucs, pr_aucs = [], []
-            for i, _ in enumerate(dfs_train_test):
+            for i, _ in tqdm(
+                enumerate(dfs_train_test),
+                desc="Iterating over non-validation folds",
+                total=args.n_splits_train_test,
+                leave=False,
+            ):
                 df_train = pl.concat(
                     [
                         dfs_train_test[j]
@@ -300,23 +418,51 @@ def main(
                     ]
                 )
                 df_test = dfs_train_test[i]
-                X_train = df_train.drop(
-                    "READER_ID", "LABEL", "TRIAL_ID", "SAMPLE_ID", strict=False
-                ).to_numpy()
-                X_test = df_test.drop(
-                    "READER_ID", "LABEL", "TRIAL_ID", "SAMPLE_ID", strict=False
-                ).to_numpy()
-                y_train = df_train["LABEL"].to_numpy()
-                y_test = df_test["LABEL"].to_numpy()
-                if i == 0:
-                    X_val = df_val.drop(
+                if args.model_name.startswith("tda_experiment"):
+                    X_train = [
+                        np.array(x, dtype=float)
+                        for x in df_train["time_series"].to_list()
+                    ]
+                    X_test = [
+                        np.array(x, dtype=float)
+                        for x in df_test["time_series"].to_list()
+                    ]
+                else:
+                    X_train = df_train.drop(
                         "READER_ID",
                         "LABEL",
                         "TRIAL_ID",
                         "SAMPLE_ID",
                         strict=False,
                     ).to_numpy()
+                    X_test = df_test.drop(
+                        "READER_ID",
+                        "LABEL",
+                        "TRIAL_ID",
+                        "SAMPLE_ID",
+                        strict=False,
+                    ).to_numpy()
+                y_train = df_train["LABEL"].to_numpy()
+                y_test = df_test["LABEL"].to_numpy()
+                if i == 0:
+                    if args.model_name.startswith("tda_experiment"):
+                        X_val = [
+                            np.array(x, dtype=float)
+                            for x in df_val["time_series"].to_list()
+                        ]
+                    else:
+                        X_val = df_val.drop(
+                            "READER_ID",
+                            "LABEL",
+                            "TRIAL_ID",
+                            "SAMPLE_ID",
+                            strict=False,
+                        ).to_numpy()
                     y_val = df_val["LABEL"].to_numpy()
+                    if args.verbose:
+                        tqdm.write(
+                            "Optimizing hyperparameters on validation split..."
+                        )
                     best_params = get_best_params(
                         X_train=X_train,
                         X_val=X_val,
@@ -325,13 +471,22 @@ def main(
                         pipeline=pipeline,
                         hyperparams=hyperparams,
                         scoring="roc_auc",
+                        search_kind=search_kind,
+                        n_iter=args.n_iter,
                         n_jobs=args.n_jobs,
+                        random_state=rng.integers(low=0, high=2**32),
                     )
+                    if args.verbose:
+                        tqdm.write(
+                            "Finished optimizing hyperparameters on "
+                            "validation split."
+                        )
                 pipeline_best = pipeline.set_params(**best_params)
                 pipeline_best.fit(X_train, y_train)
                 y_proba = pipeline_best.predict_proba(X_test)
                 roc_aucs.append(roc_auc_score(y_test, y_proba[:, 1]))
                 pr_aucs.append(average_precision_score(y_test, y_proba[:, 1]))
+            result_dict[f"repeat {idx_repeat}"]["best_params"] = best_params
             result_dict[f"repeat {idx_repeat}"]["roc_aucs"] = roc_aucs
             result_dict[f"repeat {idx_repeat}"]["pr_aucs"] = pr_aucs
             result_dict[f"repeat {idx_repeat}"]["roc_auc_mean"] = np.mean(
