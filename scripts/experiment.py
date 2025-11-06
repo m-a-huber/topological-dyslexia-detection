@@ -45,16 +45,34 @@ def parse_args():
         ),
     )
     parser.add_argument(
+        "--extended-persistence",
+        dest="use_extended_persistence",
+        action="store_true",
+        help=(
+            "Use extended persistence (ignored unless `model_name` is "
+            "'tda_experiment')"
+        ),
+    )
+    parser.add_argument(
+        "--no-extended-persistence",
+        dest="use_extended_persistence",
+        action="store_false",
+        help=(
+            "Do not use extended persistence (ignored unless `model_name` is "
+            "'tda_experiment')"
+        ),
+    )
+    parser.add_argument(
         "--include-l2",
         dest="include_l2",
         action="store_true",
-        help="Whether or not to include CopCo-L2-readers",
+        help="Include CopCo-L2-readers",
     )
     parser.add_argument(
         "--exclude-l2",
         dest="include_l2",
         action="store_false",
-        help="Whether or not to exclude CopCo-L2-readers",
+        help="Exclude CopCo-L2-readers",
     )
     parser.add_argument(
         "--n-repeats",
@@ -103,6 +121,49 @@ def parse_args():
     return parser.parse_args()
 
 
+def validate_model_name(model_name: str) -> None:
+    """Validates the model name provided."""
+    if model_name.startswith("tda_experiment"):
+        parts = model_name.split("_")
+        filtration_type, persistence_type = parts[-2:]
+        if not (
+            len(parts) == 4
+            and filtration_type
+            in constants.admissible_filtration_types_tda_experiment
+            and persistence_type
+            in constants.admissible_persistence_types_tda_experiment
+        ):
+            raise ValueError(
+                "Invalid model name for TDA-experiment; model name must be of "
+                "the form 'tda_experiment_<filtration_type>_"
+                f"<extended|ordinary>', but got {model_name} instead."
+            )
+    elif model_name.startswith("baseline_bjornsdottir"):
+        if model_name != "baseline_bjornsdottir":
+            raise ValueError(
+                "Invalid model name for Björnsdottir-baseline; model name "
+                "must be 'baseline_bjornsdottir'."
+            )
+    elif model_name.startswith("baseline_raatikainen"):
+        parts = model_name.split("_")
+        model_kind = parts[-1]
+        if not (
+            len(parts) == 3
+            and model_kind in constants.admissible_model_kinds_raatikainen
+        ):
+            raise ValueError(
+                "Invalid model name for Raatikainen-baseline; model name must "
+                "be of the form 'baseline_raatikainen_<rf|svc>', but got "
+                f"{model_name} instead."
+            )
+    else:
+        raise ValueError(
+            "Invalid choice of `model_name`; must be one of "
+            "`'tda_experiment_<filtration_type>_<extended|ordinary>'`, "
+            "`'baseline_bjornsdottir'`, and `'baseline_raatikainen_<rf|svc>'`."
+        )
+
+
 def get_best_params(
     X_train: npt.NDArray,
     X_val: npt.NDArray,
@@ -144,15 +205,15 @@ def get_best_params(
 def main(
     args: argparse.Namespace,
 ) -> None:
+    validate_model_name(args.model_name)
     rng = np.random.default_rng(seed=args.seed)
     result_file_path = Path(
         f"./outfiles/results_{args.model_name}_{args.n_repeats}_repeats_seed_"
         f"{args.seed}.json"
     )
     if not result_file_path.exists() or args.overwrite:
-        if args.model_name == "tda_experiment":
-            model_class = "tda_experiment"
-            raise NotImplementedError()
+        if args.model_name.startswith("tda_experiment"):
+            raise NotImplementedError()  # TODO
         elif args.model_name == "baseline_bjornsdottir":
             model_class = "baseline_bjornsdottir"
             pipeline = Pipeline(
@@ -171,55 +232,46 @@ def main(
                     ),
                 ]
             )
-        elif args.model_name == "baseline_raatikainen_rf":
+            hyperparams = constants.hyperparams[args.model_name]
+        elif args.model_name.startswith("baseline_raatikainen"):
             model_class = "baseline_raatikainen"
-            pipeline = Pipeline(
-                [
-                    (
-                        "scaler",
-                        MinMaxScaler(
-                            feature_range=(-1, 1),
+            model_kind = args.model_name.split("_")[-1]
+            if model_kind == "rf":
+                pipeline = Pipeline(
+                    [
+                        (
+                            "scaler",
+                            MinMaxScaler(
+                                feature_range=(-1, 1),
+                            ),
                         ),
-                    ),
-                    (
-                        "rf",
-                        RandomForestClassifier(
-                            random_state=rng.integers(low=0, high=2**32),
+                        (
+                            "rf",
+                            RandomForestClassifier(
+                                random_state=rng.integers(low=0, high=2**32),
+                            ),
                         ),
-                    ),
-                ]
-            )
-        elif args.model_name == "baseline_raatikainen_svm":
-            model_class = "baseline_raatikainen"
-            pipeline = Pipeline(
-                [
-                    (
-                        "scaler",
-                        MinMaxScaler(
-                            feature_range=(-1, 1),
+                    ]
+                )
+            elif model_kind == "svc":
+                pipeline = Pipeline(
+                    [
+                        (
+                            "scaler",
+                            MinMaxScaler(
+                                feature_range=(-1, 1),
+                            ),
                         ),
-                    ),
-                    (
-                        "svc",
-                        SVC(
-                            probability=True,
-                            random_state=rng.integers(low=0, high=2**32),
+                        (
+                            "svc",
+                            SVC(
+                                probability=True,
+                                random_state=rng.integers(low=0, high=2**32),
+                            ),
                         ),
-                    ),
-                ]
-            )
-        elif args.model_name == "baseline_benfatto":
-            raise NotImplementedError()
-        elif args.model_name == "baseline_haller":
-            raise NotImplementedError()
-        else:
-            raise ValueError(
-                "Invalid choice of `model_name`; must be one of "
-                "`'tda_experiment'`, `'baseline_bjornsdottir'`, "
-                "`'baseline_raatikainen_rf'`, `'baseline_raatikainen_svm'`, "
-                "`'baseline_benfatto'` and `'baseline_haller'`."
-            )
-        hyperparams = constants.hyperparams[args.model_name]
+                    ]
+                )
+            hyperparams = constants.hyperparams[args.model_name]
         df = make_dataframes.make_df(
             model_class=model_class,
             min_n_fixations=args.min_n_fixations,
@@ -314,39 +366,29 @@ def main(
         result_dict[f"repeat {idx_repeat}"]["roc_auc_mean"]
         for idx_repeat in range(args.n_repeats)
     ]
+    roc_auc_stds = [
+        result_dict[f"repeat {idx_repeat}"]["roc_auc_std"]
+        for idx_repeat in range(args.n_repeats)
+    ]
+    roc_auc_mean_overall = np.mean(roc_auc_means)
+    roc_auc_std_overall = np.sqrt(np.mean(np.square(roc_auc_stds)))
     pr_auc_means = [
         result_dict[f"repeat {idx_repeat}"]["pr_auc_mean"]
         for idx_repeat in range(args.n_repeats)
     ]
-    tqdm.write(
-        f"ROC AUC: {np.mean(roc_auc_means):.2f}\u00b1"
-        f"{np.std(roc_auc_means):.2f} (mean & SD of {args.n_repeats} "
-        "repetition means)"
-    )
-    tqdm.write(
-        f"PR AUC : {np.mean(pr_auc_means):.2f}\u00b1"
-        f"{np.std(pr_auc_means):.2f} (mean & SD of {args.n_repeats} "
-        "repetition means)"
-    )
-    roc_aucs_all = [
-        roc_auc
+    pr_auc_stds = [
+        result_dict[f"repeat {idx_repeat}"]["pr_auc_std"]
         for idx_repeat in range(args.n_repeats)
-        for roc_auc in result_dict[f"repeat {idx_repeat}"]["roc_aucs"]
     ]
-    pr_aucs_all = [
-        pr_auc
-        for idx_repeat in range(args.n_repeats)
-        for pr_auc in result_dict[f"repeat {idx_repeat}"]["pr_aucs"]
-    ]
+    pr_auc_mean_overall = np.mean(pr_auc_means)
+    pr_auc_std_overall = np.sqrt(np.mean(np.square(pr_auc_stds)))
     tqdm.write(
-        f"ROC AUC: {np.mean(roc_aucs_all):.2f}\u00b1"
-        f"{np.std(roc_aucs_all):.2f} (mean & SD across all "
-        f"{args.n_splits_train_test * args.n_repeats} folds)"
+        f"ROC AUC: {roc_auc_mean_overall:.2f}\u00b1{roc_auc_std_overall:.2f} "
+        f"(mean & SD aggregated over {args.n_repeats} repetition means)"
     )
     tqdm.write(
-        f"PR AUC : {np.mean(pr_aucs_all):.2f}\u00b1"
-        f"{np.std(pr_aucs_all):.2f} (mean & SD across all "
-        f"{args.n_splits_train_test * args.n_repeats} folds)"
+        f" PR AUC: {pr_auc_mean_overall:.2f}\u00b1{pr_auc_std_overall:.2f} "
+        f"(mean & SD aggregated over {args.n_repeats} repetition means)"
     )
     return
 

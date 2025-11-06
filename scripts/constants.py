@@ -60,8 +60,12 @@ subjects_dys = [
     "41",
 ]  # P32 excluded because no dyslexia screening result
 
+admissible_model_kinds_raatikainen = [
+    "rf",
+    "svc",
+]
+
 hyperparams = {
-    "tda": {},
     "baseline_bjornsdottir": {
         "rf__n_estimators": [
             1,
@@ -109,7 +113,7 @@ hyperparams = {
             20,
         ],
     },
-    "baseline_raatikainen_svm": {
+    "baseline_raatikainen_svc": {
         "svc__C": [
             1000,
             2000,
