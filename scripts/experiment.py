@@ -112,7 +112,7 @@ def parse_args():
     parser.add_argument(
         "--n-iter",
         type=int,
-        default=75,
+        default=100,
         help=(
             "Number of iterations for randomized hyperparameter search "
             "(ignored when running baseline models)"
@@ -151,9 +151,7 @@ def parse_args():
 def validate_model_name(model_name: str) -> None:
     """Validates the model name provided."""
     if not model_name:
-        raise ValueError(
-            "No model name was provided."
-        )
+        raise ValueError("No model name was provided.")
     if model_name.startswith("tda_experiment"):
         parts = model_name.split("_")
         filtration_type = parts[-1]
@@ -260,75 +258,79 @@ def get_best_params(
     return search.best_params_
 
 
-def main(
+def get_pipeline(
     args: argparse.Namespace,
-) -> None:
-    validate_model_name(args.model_name)
-    rng = np.random.default_rng(seed=args.seed)
-    result_file_path = Path(
-        f"./outfiles/results_{args.model_name}_{args.n_repeats}_repeats_seed_"
-        f"{args.seed}.json"
-    )
-    if not result_file_path.exists() or args.overwrite:
-        if args.model_name.startswith("tda_experiment"):
-            model_class = "tda_experiment"
-            filtration_type, persistence_type = args.model_name.split("_")[-2:]
-            use_extended_persistence = persistence_type == "extended"
-            hyperparams = constants.hyperparams[
-                "_".join([model_class, filtration_type])
+    rng: np.random.Generator,
+) -> Pipeline:
+    if args.model_name.startswith("tda_experiment"):
+        filtration_type = args.model_name.split("_")[-1]
+        pipeline = Pipeline(
+            [
+                (
+                    "time_series_scaler",
+                    ListTransformer(
+                        base_estimator=MinMaxScaler(feature_range=(0, 1))
+                    ),
+                ),
+                (
+                    "time_series_homology",
+                    TimeSeriesHomology(
+                        filtration_type=filtration_type,
+                        use_extended_persistence=args.use_extended_persistence,
+                        drop_inf_persistence=not args.use_extended_persistence,
+                    ),
+                ),
+                ("persistence_processor", PersistenceProcessor()),
+                (
+                    "persistence_imager",
+                    ListTransformer(
+                        gdrep.PersistenceImage(
+                            resolution=(50, 50),
+                        )
+                    ),
+                ),
+                (
+                    "persistence_image_scaler",
+                    PersistenceImageProcessor(feature_range=(0, 1)),
+                ),
+                (
+                    "pca",
+                    PCA(
+                        svd_solver="randomized",
+                        whiten=True,
+                        n_components=250,
+                        random_state=rng.integers(low=0, high=2**32),
+                    ),
+                ),
+                (
+                    "svc",
+                    SVC(
+                        probability=True,
+                        random_state=rng.integers(low=0, high=2**32),
+                    ),
+                ),
             ]
-            search_kind = "random"
-            pipeline = Pipeline(
-                [
-                    (
-                        "time_series_scaler",
-                        ListTransformer(
-                            base_estimator=MinMaxScaler(feature_range=(0, 1))
-                        ),
+        )
+    elif args.model_name == "baseline_bjornsdottir":
+        pipeline = Pipeline(
+            [
+                (
+                    "scaler",
+                    MinMaxScaler(
+                        feature_range=(-1, 1),
                     ),
-                    (
-                        "time_series_homology",
-                        TimeSeriesHomology(
-                            filtration_type=filtration_type,
-                            use_extended_persistence=use_extended_persistence,
-                            drop_inf_persistence=not use_extended_persistence,
-                        ),
+                ),
+                (
+                    "rf",
+                    RandomForestClassifier(
+                        random_state=rng.integers(low=0, high=2**32),
                     ),
-                    ("persistence_processor", PersistenceProcessor()),
-                    (
-                        "persistence_imager",
-                        ListTransformer(
-                            gdrep.PersistenceImage(
-                                resolution=(50, 50),
-                            )
-                        ),
-                    ),
-                    (
-                        "persistence_image_scaler",
-                        PersistenceImageProcessor(feature_range=(0, 1)),
-                    ),
-                    (
-                        "pca",
-                        PCA(
-                            svd_solver="randomized",
-                            whiten=True,
-                            n_components=250,
-                            random_state=rng.integers(low=0, high=2**32),
-                        ),
-                    ),
-                    (
-                        "svc",
-                        SVC(
-                            probability=True,
-                            random_state=rng.integers(low=0, high=2**32),
-                        ),
-                    ),
-                ]
-            )
-        elif args.model_name == "baseline_bjornsdottir":
-            model_class = "baseline_bjornsdottir"
-            hyperparams = constants.hyperparams[args.model_name]
-            search_kind = "grid"
+                ),
+            ]
+        )
+    elif args.model_name.startswith("baseline_raatikainen"):
+        model_kind = args.model_name.split("_")[-1]
+        if model_kind == "rf":
             pipeline = Pipeline(
                 [
                     (
@@ -345,46 +347,55 @@ def main(
                     ),
                 ]
             )
-        elif args.model_name.startswith("baseline_raatikainen"):
-            model_class = "baseline_raatikainen"
-            model_kind = args.model_name.split("_")[-1]
+        elif model_kind == "svc":
+            pipeline = Pipeline(
+                [
+                    (
+                        "scaler",
+                        MinMaxScaler(
+                            feature_range=(-1, 1),
+                        ),
+                    ),
+                    (
+                        "svc",
+                        SVC(
+                            probability=True,
+                            random_state=rng.integers(low=0, high=2**32),
+                        ),
+                    ),
+                ]
+            )
+    return pipeline
+
+
+def main(
+    args: argparse.Namespace,
+) -> None:
+    validate_model_name(args.model_name)
+    tqdm.write(
+        f" RUNNING MODEL '{args.model_name}' ".center(120, "*")
+    )
+    rng = np.random.default_rng(seed=args.seed)
+    result_file_path = Path(
+        f"./outfiles/results_{args.model_name}_{args.n_repeats}_repeats_seed_"
+        f"{args.seed}.json"
+    )
+    if not result_file_path.exists() or args.overwrite:
+        if args.model_name.startswith("tda_experiment"):
+            model_class = "tda_experiment"
+            hyperparams = constants.hyperparams[args.model_name]
+            search_kind = "random"
+            pipeline = get_pipeline(args, rng)
+        elif args.model_name == "baseline_bjornsdottir":
+            model_class = "baseline_bjornsdottir"
             hyperparams = constants.hyperparams[args.model_name]
             search_kind = "grid"
-            if model_kind == "rf":
-                pipeline = Pipeline(
-                    [
-                        (
-                            "scaler",
-                            MinMaxScaler(
-                                feature_range=(-1, 1),
-                            ),
-                        ),
-                        (
-                            "rf",
-                            RandomForestClassifier(
-                                random_state=rng.integers(low=0, high=2**32),
-                            ),
-                        ),
-                    ]
-                )
-            elif model_kind == "svc":
-                pipeline = Pipeline(
-                    [
-                        (
-                            "scaler",
-                            MinMaxScaler(
-                                feature_range=(-1, 1),
-                            ),
-                        ),
-                        (
-                            "svc",
-                            SVC(
-                                probability=True,
-                                random_state=rng.integers(low=0, high=2**32),
-                            ),
-                        ),
-                    ]
-                )
+            pipeline = get_pipeline(args, rng)
+        elif args.model_name.startswith("baseline_raatikainen"):
+            model_class = "baseline_raatikainen"
+            hyperparams = constants.hyperparams[args.model_name]
+            search_kind = "grid"
+            pipeline = get_pipeline(args, rng)
         df = make_dataframes.make_df(
             model_class=model_class,
             min_n_fixations=args.min_n_fixations,
