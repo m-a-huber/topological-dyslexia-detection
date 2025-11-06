@@ -3,6 +3,7 @@ from typing import Optional
 import gudhi as gd
 import numpy as np
 import numpy.typing as npt
+from joblib import Parallel, delayed
 from sklearn.base import BaseEstimator, TransformerMixin
 from typing_extensions import Self
 
@@ -34,7 +35,7 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
             46337. Defaults to `11`.
         min_persistence (float, optional): The minimum persistence value to
             take into account. Defaults to `0.0`.
-        drop_infinite_persistence (bool, optional): Whether or not to drop
+        drop_inf_persistence (bool, optional): Whether or not to drop
             homological generators with infinite lifespan from the resulting
             persistences. Ignored if `use_extended_persistence` is set to
             `True`, since in that case all generators have finite lifespan.
@@ -49,7 +50,8 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
         use_extended_persistence: bool = True,
         homology_coeff_field: int = 11,
         min_persistence: float = 0.0,
-        drop_infinite_persistence: bool = False,
+        drop_inf_persistence: bool = False,
+        n_jobs: Optional[int] = None,
     ):
         self.filtration_type = filtration_type
         self.slope = slope
@@ -57,7 +59,8 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
         self.use_extended_persistence = use_extended_persistence
         self.homology_coeff_field = homology_coeff_field
         self.min_persistence = min_persistence
-        self.drop_infinite_persistence = drop_infinite_persistence
+        self.drop_inf_persistence = drop_inf_persistence
+        self.n_jobs = n_jobs
 
     def fit(
         self,
@@ -98,41 +101,64 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
                 with 0-dimensional homology and contains information from
                 consecutive homological dimensions.
         """
-        self.simplex_tree_lists_: list[list[gd.SimplexTree]] = [
-            [
+
+        def _get_simplex_tree_list(time_series):  # helper for parallelization
+            return [
                 self._get_simplex_tree(time_series[:, [0, coord]])
                 for coord in range(1, time_series.shape[1])
             ]
-            for time_series in X
-        ]
+
+        self.simplex_tree_lists_: list[list[gd.SimplexTree]] = Parallel(
+            n_jobs=self.n_jobs
+        )(delayed(_get_simplex_tree_list)(time_series) for time_series in X)
         if self.use_extended_persistence:
             for simplex_tree_list in self.simplex_tree_lists_:
                 for simplex_tree in simplex_tree_list:
                     simplex_tree.extend_filtration()
-            dgms_lists = [
-                [
+
+            def _get_extended_persistences(
+                simplex_tree_list, homology_coeff_field, min_persistence
+            ):  # helper for parallelization
+                return [
                     simplex_tree.extended_persistence(
-                        homology_coeff_field=self.homology_coeff_field,
-                        min_persistence=self.min_persistence,
+                        homology_coeff_field=homology_coeff_field,
+                        min_persistence=min_persistence,
                     )
                     for simplex_tree in simplex_tree_list
                 ]
+
+            dgms_lists = Parallel(n_jobs=self.n_jobs, backend="threading")(
+                delayed(_get_extended_persistences)(
+                    simplex_tree_list,
+                    self.homology_coeff_field,
+                    self.min_persistence,
+                )
                 for simplex_tree_list in self.simplex_tree_lists_
-            ]
+            )
         else:
-            dgms_lists = [
-                [
+
+            def _get_persistences(
+                simplex_tree_list, homology_coeff_field, min_persistence
+            ):  # helper for parallelization
+                return [
                     [
                         simplex_tree.persistence(
-                            homology_coeff_field=self.homology_coeff_field,
-                            min_persistence=self.min_persistence,
+                            homology_coeff_field=homology_coeff_field,
+                            min_persistence=min_persistence,
                             persistence_dim_max=False,
                         )
                     ]
                     for simplex_tree in simplex_tree_list
                 ]
+
+            dgms_lists = Parallel(n_jobs=self.n_jobs)(
+                delayed(_get_persistences)(
+                    simplex_tree_list,
+                    self.homology_coeff_field,
+                    self.min_persistence,
+                )
                 for simplex_tree_list in self.simplex_tree_lists_
-            ]
+            )
         dgms_formatted_lists = [
             [
                 [
@@ -147,7 +173,7 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
         ]
         if (
             not self.use_extended_persistence
-            and self.drop_infinite_persistence
+            and self.drop_inf_persistence
         ):
             dgms_formatted_lists = [
                 [
@@ -252,12 +278,12 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
         self,
         dgm: list[tuple[int, tuple[float, float]]],
     ) -> list[npt.NDArray]:
-        """Helper function to convert a persistence diagram given in the Gudhi
+        """Helper function to convert a persistence diagram given in the GUDHI
         format into the format suitable for further processing and plotting.
 
         Args:
             dgm (list[tuple[int, tuple[float, float]]]): Persistence diagram
-                given in the Gudhi format, that is, a list containing tuples of
+                given in the GUDHI format, that is, a list containing tuples of
                 the form (homological_dimension, (birth, death)).
 
         Returns:
