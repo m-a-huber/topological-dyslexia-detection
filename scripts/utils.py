@@ -81,20 +81,22 @@ class PersistenceProcessor(BaseEstimator, TransformerMixin):
 
 
 class PersistenceImageProcessor(BaseEstimator, TransformerMixin):
-    """Helper class that scales the pixel values of the persistence images and
-    concatenates the flattened images corresponding to one sample.
+    """Helper class that normalizes the pixel values of the persistence images
+    to the desired range and concatenates the flattened images corresponding to
+    one sample.
     """
 
-    def __init__(self, scaler):
-        self.scaler = scaler
+    def __init__(self, feature_range=(0, 1)):
+        self.feature_range = feature_range
 
     def fit(self, X, y=None):  # noqa: ARG002
+        self.min_x, self.max_x = X.min(), X.max()
         return self
 
     def transform(self, X):
-        n_samples = len(X)
-        self._scaler_ = ListTransformer(self.scaler)
-        X_transformed = self._scaler_.fit_transform(
-            X.reshape(n_samples, -1, 1)
-        ).reshape(n_samples, -1)
-        return X_transformed
+        X_std = (X - self.min_x) / (self.max_x - self.min_x)
+        X_scaled = (
+            X_std * (self.feature_range[1] - self.feature_range[0])
+            + self.feature_range[0]
+        )
+        return X_scaled.reshape(len(X), -1)
