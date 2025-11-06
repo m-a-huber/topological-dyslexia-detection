@@ -1,3 +1,7 @@
+from scipy.stats import loguniform
+
+from scripts.utils import UniformSlope
+
 subjects_non_dys_l1 = [
     "02",
     "03",
@@ -60,12 +64,110 @@ subjects_dys = [
     "41",
 ]  # P32 excluded because no dyslexia screening result
 
+admissible_filtration_types_tda_experiment = [
+    "horizontal",
+    "sloped",
+    "sigmoid",
+    "arctan",
+]
+
+admissible_persistence_types_tda_experiment = [
+    "ordinary",
+    "extended",
+]
+
 admissible_model_kinds_raatikainen = [
     "rf",
     "svc",
 ]
 
 hyperparams = {
+    "tda_experiment_horizontal": [
+        {
+            "persistence_imager__base_estimator__bandwidth": loguniform(
+                1e-3, 1e-1
+            ),
+            "svc__kernel": ["rbf"],
+            "svc__C": loguniform(1e-1, 1e2),
+            "svc__gamma": loguniform(1e-4, 1e-2),
+        },
+        {
+            "persistence_imager__base_estimator__bandwidth": loguniform(
+                1e-3, 1e-1
+            ),
+            "svc__kernel": ["linear"],
+            "svc__C": loguniform(1e-2, 1e1),
+        },
+    ],
+    "tda_experiment_sloped": [
+        {
+            "time_series_homology__slope": UniformSlope(
+                min_slope=-2, max_slope=2
+            ),
+            "persistence_imager__base_estimator__bandwidth": loguniform(
+                1e-3, 1e-1
+            ),
+            "svc__kernel": ["rbf"],
+            "svc__C": loguniform(1e-1, 1e2),
+            "svc__gamma": loguniform(1e-4, 1e-2),
+        },
+        {
+            "time_series_homology__slope": UniformSlope(
+                min_slope=-2, max_slope=2
+            ),
+            "persistence_imager__base_estimator__bandwidth": loguniform(
+                1e-3, 1e-1
+            ),
+            "svc__kernel": ["linear"],
+            "svc__C": loguniform(1e-2, 1e1),
+        },
+    ],
+    "tda_experiment_sigmoid": [
+        {
+            "time_series_homology__slope": UniformSlope(
+                min_slope=-2, max_slope=2
+            ),
+            "persistence_imager__base_estimator__bandwidth": loguniform(
+                1e-3, 1e-1
+            ),
+            "svc__kernel": ["rbf"],
+            "svc__C": loguniform(1e-1, 1e2),
+            "svc__gamma": loguniform(1e-4, 1e-2),
+        },
+        {
+            "time_series_homology__slope": UniformSlope(
+                min_slope=-2, max_slope=2
+            ),
+            "persistence_imager__base_estimator__bandwidth": loguniform(
+                1e-3, 1e-1
+            ),
+            "svc__kernel": ["linear"],
+            "svc__C": loguniform(1e-2, 1e1),
+        },
+    ],
+    "tda_experiment_arctan": [
+        {
+            "time_series_homology__slope": UniformSlope(
+                min_slope=-2, max_slope=2
+            ),
+            "persistence_imager__base_estimator__bandwidth": loguniform(
+                1e-3, 1e-1
+            ),
+            "svc__kernel": ["rbf"],
+            "svc__C": loguniform(1e-1, 1e2),
+            "svc__gamma": loguniform(1e-4, 1e-2),
+        },
+        {
+            "time_series_homology__slope": UniformSlope(
+                min_slope=-2, max_slope=2
+            ),
+            "persistence_imager__base_estimator__bandwidth": loguniform(
+                1e-3, 1e-1
+            ),
+            "svc__kernel": ["linear"],
+            "svc__C": loguniform(1e-2, 1e1),
+        },
+    ],
     "baseline_bjornsdottir": {
         "rf__n_estimators": [
             1,
@@ -80,10 +182,9 @@ hyperparams = {
             7,
             9,
         ],
-        "rf__max_features": [
+        "rf__max_features": [  # "auto" is excluded because deprecated
             "sqrt",
             "log2",
-            # "auto",  # exclude because deprecated
         ],
     },
     # Grids below were found in the code at
