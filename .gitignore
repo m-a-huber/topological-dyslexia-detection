@@ -3,7 +3,7 @@ __pycache__/
 .venv
 data_*/
 dataframes/
-outfiles/
+outfiles*/
 trash
 *.ipynb
 *.md
