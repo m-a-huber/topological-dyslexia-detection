@@ -88,7 +88,6 @@ def parse_args():
     )
     parser.add_argument(
         "--with-n-fix",
-        dest="with-n-fix",
         action="store_true",
         help="Append the length of a scanpath as an extra feature",
     )
