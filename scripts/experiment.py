@@ -94,7 +94,7 @@ def parse_args():
     parser.add_argument(
         "--n-iter",
         type=int,
-        default=100,
+        default=75,
         help=(
             "Number of iterations for randomized hyperparameter search "
             "(ignored when running baseline models)"
@@ -394,10 +394,16 @@ def main(
     validate_model_name(args.model_name)
     tqdm.write(f" RUNNING MODEL '{args.model_name}' ".center(120, "*"))
     rng = np.random.default_rng(seed=args.seed)
-    result_file_path = Path(
-        f"./outfiles/results_{args.model_name}_{args.n_repeats}_repeats_seed_"
-        f"{args.seed}.json"
-    )
+    if args.with_n_fix:
+        result_file_path = Path(
+            f"./outfiles_with_n_fix/results_{args.model_name}_{args.n_repeats}"
+            f"_repeats_seed_{args.seed}.json"
+        )
+    else:
+        result_file_path = Path(
+            f"./outfiles/results_{args.model_name}_{args.n_repeats}"
+            f"_repeats_seed_{args.seed}.json"
+        )
     if not result_file_path.exists() or args.overwrite:
         if args.model_name.startswith("tda_experiment"):
             model_class = "tda_experiment"
