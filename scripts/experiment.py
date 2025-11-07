@@ -1,11 +1,5 @@
 import argparse
 import json
-import os
-
-os.environ["OMP_NUM_THREADS"] = "1"
-os.environ["MKL_NUM_THREADS"] = "1"
-os.environ["OPENBLAS_NUM_THREADS"] = "1"
-
 from collections import defaultdict
 from pathlib import Path
 from typing import Optional
@@ -60,23 +54,6 @@ def parse_args():
         help=(
             "Minimum number of fixation for a trial not to be discarded "
             "(ignored when running baseline models)"
-        ),
-    )
-    parser.add_argument(
-        "--extended-persistence",
-        dest="use_extended_persistence",
-        action="store_true",
-        help=(
-            "Use extended persistence (ignored when running baseline models)"
-        ),
-    )
-    parser.add_argument(
-        "--no-extended-persistence",
-        dest="use_extended_persistence",
-        action="store_false",
-        help=(
-            "Do not use extended persistence (ignored when running baseline "
-            "models)"
         ),
     )
     parser.add_argument(
@@ -144,7 +121,6 @@ def parse_args():
         help="Seed for reproducibility (int or None)",
     )
     parser.set_defaults(include_l2=True)
-    parser.set_defaults(use_extended_persistence=False)
     return parser.parse_args()
 
 
@@ -153,17 +129,19 @@ def validate_model_name(model_name: str) -> None:
     if not model_name:
         raise ValueError("No model name was provided.")
     if model_name.startswith("tda_experiment"):
-        parts = model_name.split("_")
-        filtration_type = parts[-1]
+        parts = args.model_name.split("_")
+        filtration_type, persistence_type = parts[-2:]
         if not (
-            len(parts) == 3
+            len(parts) == 4
             and filtration_type
             in constants.admissible_filtration_types_tda_experiment
+            and persistence_type
+            in constants.admissible_persistence_types_tda_experiment
         ):
             raise ValueError(
                 "Invalid model name for TDA-experiment; model name must be of "
-                "the form 'tda_experiment_<filtration_type>', but got "
-                f"{model_name} instead."
+                "the form 'tda_experiment_<horizontal|sloped|sigmoid|arctan>_"
+                f"<ordinary|extended>', but got {model_name} instead."
             )
     elif model_name.startswith("baseline_bjornsdottir"):
         if model_name != "baseline_bjornsdottir":
@@ -186,8 +164,9 @@ def validate_model_name(model_name: str) -> None:
     else:
         raise ValueError(
             "Invalid choice of `model_name`; must be one of "
-            "`'tda_experiment_<filtration_type>'`, `'baseline_bjornsdottir'`, "
-            "and `'baseline_raatikainen_<rf|svc>'`."
+            "`'tda_experiment_<horizontal|sloped|sigmoid|arctan>_"
+            "<ordinary|extended>'`, `'baseline_bjornsdottir'`, and "
+            "`'baseline_raatikainen_<rf|svc>'`."
         )
 
 
@@ -263,7 +242,9 @@ def get_pipeline(
     rng: np.random.Generator,
 ) -> Pipeline:
     if args.model_name.startswith("tda_experiment"):
-        filtration_type = args.model_name.split("_")[-1]
+        parts = args.model_name.split("_")
+        filtration_type, persistence_type = parts[-2:]
+        use_extended_persistence = persistence_type == "extended"
         pipeline = Pipeline(
             [
                 (
@@ -276,8 +257,8 @@ def get_pipeline(
                     "time_series_homology",
                     TimeSeriesHomology(
                         filtration_type=filtration_type,
-                        use_extended_persistence=args.use_extended_persistence,
-                        drop_inf_persistence=not args.use_extended_persistence,
+                        use_extended_persistence=use_extended_persistence,
+                        drop_inf_persistence=not use_extended_persistence,
                     ),
                 ),
                 ("persistence_processor", PersistenceProcessor()),
@@ -372,9 +353,7 @@ def main(
     args: argparse.Namespace,
 ) -> None:
     validate_model_name(args.model_name)
-    tqdm.write(
-        f" RUNNING MODEL '{args.model_name}' ".center(120, "*")
-    )
+    tqdm.write(f" RUNNING MODEL '{args.model_name}' ".center(120, "*"))
     rng = np.random.default_rng(seed=args.seed)
     result_file_path = Path(
         f"./outfiles/results_{args.model_name}_{args.n_repeats}_repeats_seed_"
@@ -383,7 +362,9 @@ def main(
     if not result_file_path.exists() or args.overwrite:
         if args.model_name.startswith("tda_experiment"):
             model_class = "tda_experiment"
-            hyperparams = constants.hyperparams[args.model_name]
+            hyperparams = constants.hyperparams[
+                "_".join(args.model_name.split("_")[:3])
+            ]
             search_kind = "random"
             pipeline = get_pipeline(args, rng)
         elif args.model_name == "baseline_bjornsdottir":

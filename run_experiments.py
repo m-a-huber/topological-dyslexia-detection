@@ -5,12 +5,12 @@ flag_sets = (
     "--model-name baseline_bjornsdottir --n-repeats 10 --n-jobs 8 --verbose",
     "--model-name baseline_raatikainen_svc --n-repeats 10 --n-jobs 8 --verbose",
     "--model-name baseline_raatikainen_rf --n-repeats 10 --n-jobs 8 --verbose",
-    "--model-name tda_experiment_horizontal --no-extended-persistence --n-repeats 10 --n-jobs 8 --n-iter 10 --verbose",
-    "--model-name tda_experiment_sloped --no-extended-persistence --n-repeats 10 --n-jobs 8 --n-iter 10 --verbose",
-    "--model-name tda_experiment_sigmoid --no-extended-persistence --n-repeats 10 --n-jobs 8 --n-iter 10 --verbose",
-    "--model-name tda_experiment_horizontal --extended-persistence --n-repeats 10 --n-jobs 8 --n-iter 10 --verbose",
-    "--model-name tda_experiment_sloped --extended-persistence --n-repeats 10 --n-jobs 8 --n-iter 10 --verbose",
-    "--model-name tda_experiment_sigmoid --extended-persistence --n-repeats 10 --n-jobs 8 --n-iter 10 --verbose",
+    "--model-name tda_experiment_horizontal_ordinary --n-repeats 10 --n-jobs 8 --n-iter 10 --verbose",
+    "--model-name tda_experiment_sloped_ordinary --n-repeats 10 --n-jobs 8 --n-iter 10 --verbose",
+    "--model-name tda_experiment_sigmoid_ordinary --n-repeats 10 --n-jobs 8 --n-iter 10 --verbose",
+    "--model-name tda_experiment_horizontal_extended --n-repeats 10 --n-jobs 8 --n-iter 10 --verbose",
+    "--model-name tda_experiment_sloped_extended --n-repeats 10 --n-jobs 8 --n-iter 10 --verbose",
+    "--model-name tda_experiment_sigmoid_extended --n-repeats 10 --n-jobs 8 --n-iter 10 --verbose",
 )
 
 for flag_set in flag_sets:
