@@ -16,8 +16,8 @@ from sklearn.model_selection import (
     PredefinedSplit,
     RandomizedSearchCV,
 )
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.pipeline import FeatureUnion, Pipeline
+from sklearn.preprocessing import FunctionTransformer, MinMaxScaler
 from sklearn.svm import SVC
 from threadpoolctl import threadpool_limits
 from tqdm import tqdm
@@ -85,6 +85,12 @@ def parse_args():
         type=int,
         default=5,
         help=("Number of splits to break up non-validation data into"),
+    )
+    parser.add_argument(
+        "--with-n-fix",
+        dest="with-n-fix",
+        action="store_true",
+        help="Append the length of a scanpath as an extra feature",
     )
     parser.add_argument(
         "--n-iter",
@@ -290,6 +296,40 @@ def get_pipeline(
                         random_state=rng.integers(low=0, high=2**32),
                     ),
                 ),
+            ]
+        )
+        pipeline_no_svc, svc = pipeline[:-1], pipeline[-1]
+        if args.with_n_fix:
+            extra_feature_transformer = Pipeline(
+                [
+                    (
+                        "get_lengths",
+                        FunctionTransformer(
+                            lambda X: np.array(
+                                [len(x) for x in X], dtype=float
+                            ).reshape(-1, 1)
+                        ),
+                    ),
+                    ("scale_lengths", MinMaxScaler(feature_range=(0, 1))),
+                ]
+            )
+        else:
+            extra_feature_transformer = FunctionTransformer(
+                lambda X: np.empty(shape=(len(X), 0), dtype=float)
+            )
+        pipeline_union = FeatureUnion(
+            [
+                ("time_series_features", pipeline_no_svc),
+                ("extra_feature", extra_feature_transformer),
+            ]
+        )
+        pipeline = Pipeline(
+            [
+                (
+                    "feature_union",
+                    pipeline_union,
+                ),
+                ("svc", svc),
             ]
         )
     elif args.model_name == "baseline_bjornsdottir":

@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 from scipy.stats import loguniform
 
 from scripts.utils import UniformSlope
@@ -84,7 +85,7 @@ admissible_model_kinds_raatikainen = [
 hyperparams = {
     "tda_experiment_horizontal": [
         {
-            "persistence_imager__base_estimator__bandwidth": loguniform(
+            "feature_union__time_series_features__persistence_imager__base_estimator__bandwidth": loguniform(
                 1e-3, 1e-1
             ),
             "svc__kernel": ["rbf"],
@@ -92,7 +93,7 @@ hyperparams = {
             "svc__gamma": loguniform(1e-4, 1e-2),
         },
         {
-            "persistence_imager__base_estimator__bandwidth": loguniform(
+            "feature_union__time_series_features__persistence_imager__base_estimator__bandwidth": loguniform(
                 1e-3, 1e-1
             ),
             "svc__kernel": ["linear"],
@@ -101,10 +102,10 @@ hyperparams = {
     ],
     "tda_experiment_sloped": [
         {
-            "time_series_homology__slope": UniformSlope(
+            "feature_union__time_series_features__time_series_homology__slope": UniformSlope(
                 min_slope=-2, max_slope=2
             ),
-            "persistence_imager__base_estimator__bandwidth": loguniform(
+            "feature_union__time_series_features__persistence_imager__base_estimator__bandwidth": loguniform(
                 1e-3, 1e-1
             ),
             "svc__kernel": ["rbf"],
@@ -112,10 +113,10 @@ hyperparams = {
             "svc__gamma": loguniform(1e-4, 1e-2),
         },
         {
-            "time_series_homology__slope": UniformSlope(
+            "feature_union__time_series_features__time_series_homology__slope": UniformSlope(
                 min_slope=-2, max_slope=2
             ),
-            "persistence_imager__base_estimator__bandwidth": loguniform(
+            "feature_union__time_series_features__persistence_imager__base_estimator__bandwidth": loguniform(
                 1e-3, 1e-1
             ),
             "svc__kernel": ["linear"],
@@ -124,10 +125,10 @@ hyperparams = {
     ],
     "tda_experiment_sigmoid": [
         {
-            "time_series_homology__slope": UniformSlope(
+            "feature_union__time_series_features__time_series_homology__slope": UniformSlope(
                 min_slope=-2, max_slope=2
             ),
-            "persistence_imager__base_estimator__bandwidth": loguniform(
+            "feature_union__time_series_features__persistence_imager__base_estimator__bandwidth": loguniform(
                 1e-3, 1e-1
             ),
             "svc__kernel": ["rbf"],
@@ -135,10 +136,10 @@ hyperparams = {
             "svc__gamma": loguniform(1e-4, 1e-2),
         },
         {
-            "time_series_homology__slope": UniformSlope(
+            "feature_union__time_series_features__time_series_homology__slope": UniformSlope(
                 min_slope=-2, max_slope=2
             ),
-            "persistence_imager__base_estimator__bandwidth": loguniform(
+            "feature_union__time_series_features__persistence_imager__base_estimator__bandwidth": loguniform(
                 1e-3, 1e-1
             ),
             "svc__kernel": ["linear"],
@@ -147,10 +148,10 @@ hyperparams = {
     ],
     "tda_experiment_arctan": [
         {
-            "time_series_homology__slope": UniformSlope(
+            "feature_union__time_series_features__time_series_homology__slope": UniformSlope(
                 min_slope=-2, max_slope=2
             ),
-            "persistence_imager__base_estimator__bandwidth": loguniform(
+            "feature_union__time_series_features__persistence_imager__base_estimator__bandwidth": loguniform(
                 1e-3, 1e-1
             ),
             "svc__kernel": ["rbf"],
@@ -158,10 +159,10 @@ hyperparams = {
             "svc__gamma": loguniform(1e-4, 1e-2),
         },
         {
-            "time_series_homology__slope": UniformSlope(
+            "feature_union__time_series_features__time_series_homology__slope": UniformSlope(
                 min_slope=-2, max_slope=2
             ),
-            "persistence_imager__base_estimator__bandwidth": loguniform(
+            "feature_union__time_series_features__persistence_imager__base_estimator__bandwidth": loguniform(
                 1e-3, 1e-1
             ),
             "svc__kernel": ["linear"],
