@@ -52,7 +52,7 @@ class ListTransformer(BaseEstimator, TransformerMixin):
 
 class PersistenceProcessor(BaseEstimator, TransformerMixin):
     """Helper class that transforms output of TimeSeriesHomology into a format
-    suitable for subsequent creation of persistence images by prudcing a list
+    suitable for subsequent creation of persistence images by producing a list
     of lists of NumPy-arrays of the form
     `(n_samples, n_dgms_per_sample, n_gens_of_dgm, 2)`.
     """

@@ -378,7 +378,7 @@ def get_dfs_splits(
             reproducibility. Defaults to None.
 
     Returns:
-        tuple[pl.DataFrame, list[pl.DataFrame]]: Tuple containing the datafram
+        tuple[pl.DataFrame, list[pl.DataFrame]]: Tuple containing the dataframe
             corresponding to the validation split, and a list containing the
             dataframes corresponding to each subsequent split.
     """
