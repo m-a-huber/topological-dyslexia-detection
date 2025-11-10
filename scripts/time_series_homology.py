@@ -87,9 +87,11 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
                 scikit-learn.
 
         Returns:
-            list[list[list[list[npt.NDArray]]]]: A list containing lists of
-                lists of persistence diagrams of each time series, one for each
-                coordinate of the value of the time series. Each list of
+            list[list[list[list[npt.NDArray]]]]: A list that, for each element
+                time series in X, contains a list that, for each coordinate of
+                the time series, contains a list of persistence diagrams. The
+                output can thus be thought of as being of shape (n_time_series,
+                n_coordinates, n_diagrams, n_hom_dim, n_hom_gens). Each list of
                 persistence diagrams contains either three (if
                 `use_extended_persistence` is set to `True`) or one persistence
                 diagrams (otherwise). In the former case, the list contains the
