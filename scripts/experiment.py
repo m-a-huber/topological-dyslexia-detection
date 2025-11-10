@@ -92,6 +92,21 @@ def parse_args():
         help="Append the length of a scanpath as an extra feature",
     )
     parser.add_argument(
+        "--balanced",
+        action="store_true",
+        help="Use balanced class weights in final SVC",
+    )
+    parser.add_argument(
+        "--truncate",
+        type=float,
+        default=1.0,
+        help=(
+            "Representative percentage of trials to consider (in terms of "
+            "length; applied after trials with fewer than --min-n-fixations "
+            "fixations)"
+        ),
+    )
+    parser.add_argument(
         "--n-iter",
         type=int,
         default=75,
@@ -291,6 +306,7 @@ def get_pipeline(
                 (
                     "svc",
                     SVC(
+                        class_weight="balanced" if args.balanced else None,
                         probability=True,
                         random_state=rng.integers(low=0, high=2**32),
                     ),
@@ -394,16 +410,17 @@ def main(
     validate_model_name(args.model_name)
     tqdm.write(f" RUNNING MODEL '{args.model_name}' ".center(120, "*"))
     rng = np.random.default_rng(seed=args.seed)
+    outdir = "outfiles"
+    if args.balanced:
+        outdir += "_balanced"
+    if args.truncate:
+        outdir += f"_truncate_{args.truncate}"
     if args.with_n_fix:
-        result_file_path = Path(
-            f"./outfiles_with_n_fix/results_{args.model_name}_{args.n_repeats}"
-            f"_repeats_seed_{args.seed}.json"
-        )
-    else:
-        result_file_path = Path(
-            f"./outfiles/results_{args.model_name}_{args.n_repeats}"
-            f"_repeats_seed_{args.seed}.json"
-        )
+        outdir += "_with_n_fix"
+    result_file_path = Path(
+        f"./{outdir}/results_{args.model_name}_{args.n_repeats}_repeats_"
+        f"seed_{args.seed}.json"
+    )
     if not result_file_path.exists() or args.overwrite:
         if args.model_name.startswith("tda_experiment"):
             model_class = "tda_experiment"
@@ -429,6 +446,24 @@ def main(
             verbose=args.verbose,
             overwrite=args.overwrite,
         )
+        if (
+            args.model_name.startswith("tda_experiment")
+            and args.truncate < 1.0
+        ):
+            df_with_len = df.with_columns(
+                pl.col("time_series").list.len().alias("length")
+            )
+            coverage = 100 * args.truncate
+            min_len, max_len = np.percentile(
+                df_with_len["length"],
+                [
+                    0.5 * (100 - coverage),
+                    coverage + 0.5 * (100 - coverage),
+                ],
+            ).astype(int)
+            df = df_with_len.filter(
+                pl.col("length").is_between(min_len, max_len)
+            ).drop("length")
         result_dict = defaultdict(dict)
         for idx_repeat in tqdm(
             range(args.n_repeats),
