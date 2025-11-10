@@ -397,7 +397,7 @@ def get_dfs_splits(
     skf = StratifiedKFold(
         n_splits=n_splits_train_test,
         shuffle=True,
-        random_state=42,
+        random_state=random_state,
     )
     dfs_aux_train_test = [
         df_aux_train_test[split_idxs]

@@ -200,7 +200,7 @@ def get_best_params(
     scoring: str,
     search_kind: str,  # either 'grid' or 'random'
     n_iter: int,  # no. of iterations for randomized search
-    n_jobs: int,
+    n_jobs: int | None,
     random_state: Optional[int],
 ) -> dict[str, list[float]]:
     """Function performing grid search to tune model parameters by training on
