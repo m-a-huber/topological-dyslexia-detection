@@ -5,16 +5,18 @@ n_repeats = 10
 n_iter = 75
 n_jobs = 8
 
+common_flag = f"--n-repeats {n_repeats} --n-iter {n_iter} --n-jobs {n_jobs} --verbose"
+
 flag_sets = (
-    f"--model-name baseline_bjornsdottir --n-repeats {n_repeats} --n-jobs {n_jobs} --verbose",
-    f"--model-name baseline_raatikainen_svc --n-repeats {n_repeats} --n-jobs {n_jobs} --verbose",
-    f"--model-name baseline_raatikainen_rf --n-repeats {n_repeats} --n-jobs {n_jobs} --verbose",
-    f"--model-name tda_experiment_horizontal_ordinary --n-repeats {n_repeats} --n-iter {n_iter} --n-jobs {n_jobs} --verbose",
-    f"--model-name tda_experiment_sloped_ordinary --n-repeats {n_repeats} --n-iter {n_iter} --n-jobs {n_jobs} --verbose",
-    f"--model-name tda_experiment_sigmoid_ordinary --n-repeats {n_repeats} --n-iter {n_iter} --n-jobs {n_jobs} --verbose",
-    f"--model-name tda_experiment_horizontal_extended --n-repeats {n_repeats} --n-iter {n_iter} --n-jobs {n_jobs} --verbose",
-    f"--model-name tda_experiment_sloped_extended --n-repeats {n_repeats} --n-iter {n_iter} --n-jobs {n_jobs} --verbose",
-    f"--model-name tda_experiment_sigmoid_extended --n-repeats {n_repeats} --n-iter {n_iter} --n-jobs {n_jobs} --verbose",
+    f"--model-name baseline_bjornsdottir {common_flag}",
+    f"--model-name baseline_raatikainen_svc {common_flag}",
+    f"--model-name baseline_raatikainen_rf {common_flag}",
+    f"--model-name tda_experiment_horizontal_ordinary {common_flag}",
+    f"--model-name tda_experiment_sloped_ordinary {common_flag}",
+    f"--model-name tda_experiment_sigmoid_ordinary {common_flag}",
+    f"--model-name tda_experiment_horizontal_extended {common_flag}",
+    f"--model-name tda_experiment_sloped_extended {common_flag}",
+    f"--model-name tda_experiment_sigmoid_extended {common_flag}",
 )
 
 for flag_set in flag_sets:

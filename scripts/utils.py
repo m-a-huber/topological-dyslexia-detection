@@ -16,9 +16,9 @@ def weight_abs1p(pt):
 
 class UniformSlope(rv_continuous):
     """Helper class to sample slopes of lines through the origin such that they
-    are uniform with respect to angle."""
+    are uniform with respect to angle of the sectors [min_slope, max_slope]."""
 
-    def __init__(self, min_slope=-2, max_slope=2, *args, **kwargs):
+    def __init__(self, min_slope, max_slope, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.theta_min = np.arctan(min_slope)
         self.theta_max = np.arctan(max_slope)
@@ -27,6 +27,22 @@ class UniformSlope(rv_continuous):
         rng = np.random.default_rng(random_state)
         theta = rng.uniform(self.theta_min, self.theta_max, size=size)
         return np.tan(theta)
+
+
+class UniformSlopeSym(rv_continuous):
+    """Helper class to sample slopes of lines through the origin such that they
+    are uniform with respect to angle of the two sectors [min_slope, max_slope]
+    and [-max_slope, -min_slope]."""
+
+    def __init__(self, min_slope, max_slope, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.theta_min = np.arctan(min_slope)
+        self.theta_max = np.arctan(max_slope)
+
+    def _rvs(self, size=None, random_state=None):
+        rng = np.random.default_rng(random_state)
+        theta = rng.uniform(self.theta_min, self.theta_max, size=size)
+        return rng.choice([-1, 1], size=size) * np.tan(theta)
 
 
 class ListTransformer(BaseEstimator, TransformerMixin):

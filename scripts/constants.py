@@ -1,7 +1,9 @@
 # ruff: noqa: E501
 from scipy.stats import loguniform
 
-from scripts.utils import UniformSlope
+from scripts.utils import UniformSlopeSym
+
+# relevant subject IDs
 
 subjects_non_dys_l1 = [
     "02",
@@ -22,7 +24,7 @@ subjects_non_dys_l1 = [
     "20",
     "21",
     "22",
-]  # 01, 13, 14, 17 excluded because of poor calibration or attention disorder
+]  # P01, P13, P14, P17 excluded because of poor calibration or attention disorder
 
 subjects_non_dys_l2 = [
     "42",
@@ -65,6 +67,8 @@ subjects_dys = [
     "41",
 ]  # P32 excluded because no dyslexia screening result
 
+# params for input validation
+
 admissible_filtration_types_tda_experiment = [
     "horizontal",
     "sloped",
@@ -82,92 +86,44 @@ admissible_model_kinds_raatikainen = [
     "svc",
 ]
 
+# hyperparams for tuning
+
+hyperparams_tda_common_svc = [
+    {
+        "feature_union__time_series_features__persistence_imager__base_estimator__bandwidth": loguniform(
+            1e-3, 1e-1
+        ),
+        "svc__kernel": ["rbf"],
+        "svc__C": loguniform(1e-1, 1e2),
+        "svc__gamma": loguniform(1e-4, 1e-2),
+    },
+    {
+        "feature_union__time_series_features__persistence_imager__base_estimator__bandwidth": loguniform(
+            1e-3, 1e-1
+        ),
+        "svc__kernel": ["linear"],
+        "svc__C": loguniform(1e-2, 1e1),
+    },
+]
+hyperparams_slope = {
+    "feature_union__time_series_features__time_series_homology__slope": UniformSlopeSym(
+        min_slope=0.15, max_slope=4
+    )
+}
+
 hyperparams = {
-    "tda_experiment_horizontal": [
-        {
-            "feature_union__time_series_features__persistence_imager__base_estimator__bandwidth": loguniform(
-                1e-3, 1e-1
-            ),
-            "svc__kernel": ["rbf"],
-            "svc__C": loguniform(1e-1, 1e2),
-            "svc__gamma": loguniform(1e-4, 1e-2),
-        },
-        {
-            "feature_union__time_series_features__persistence_imager__base_estimator__bandwidth": loguniform(
-                1e-3, 1e-1
-            ),
-            "svc__kernel": ["linear"],
-            "svc__C": loguniform(1e-2, 1e1),
-        },
-    ],
+    "tda_experiment_horizontal": hyperparams_tda_common_svc,
     "tda_experiment_sloped": [
-        {
-            "feature_union__time_series_features__time_series_homology__slope": UniformSlope(
-                min_slope=-2, max_slope=2
-            ),
-            "feature_union__time_series_features__persistence_imager__base_estimator__bandwidth": loguniform(
-                1e-3, 1e-1
-            ),
-            "svc__kernel": ["rbf"],
-            "svc__C": loguniform(1e-1, 1e2),
-            "svc__gamma": loguniform(1e-4, 1e-2),
-        },
-        {
-            "feature_union__time_series_features__time_series_homology__slope": UniformSlope(
-                min_slope=-2, max_slope=2
-            ),
-            "feature_union__time_series_features__persistence_imager__base_estimator__bandwidth": loguniform(
-                1e-3, 1e-1
-            ),
-            "svc__kernel": ["linear"],
-            "svc__C": loguniform(1e-2, 1e1),
-        },
+        hyperparams_slope | hyperparam_dict
+        for hyperparam_dict in hyperparams_tda_common_svc
     ],
     "tda_experiment_sigmoid": [
-        {
-            "feature_union__time_series_features__time_series_homology__slope": UniformSlope(
-                min_slope=-2, max_slope=2
-            ),
-            "feature_union__time_series_features__persistence_imager__base_estimator__bandwidth": loguniform(
-                1e-3, 1e-1
-            ),
-            "svc__kernel": ["rbf"],
-            "svc__C": loguniform(1e-1, 1e2),
-            "svc__gamma": loguniform(1e-4, 1e-2),
-        },
-        {
-            "feature_union__time_series_features__time_series_homology__slope": UniformSlope(
-                min_slope=-2, max_slope=2
-            ),
-            "feature_union__time_series_features__persistence_imager__base_estimator__bandwidth": loguniform(
-                1e-3, 1e-1
-            ),
-            "svc__kernel": ["linear"],
-            "svc__C": loguniform(1e-2, 1e1),
-        },
+        hyperparams_slope | hyperparam_dict
+        for hyperparam_dict in hyperparams_tda_common_svc
     ],
     "tda_experiment_arctan": [
-        {
-            "feature_union__time_series_features__time_series_homology__slope": UniformSlope(
-                min_slope=-2, max_slope=2
-            ),
-            "feature_union__time_series_features__persistence_imager__base_estimator__bandwidth": loguniform(
-                1e-3, 1e-1
-            ),
-            "svc__kernel": ["rbf"],
-            "svc__C": loguniform(1e-1, 1e2),
-            "svc__gamma": loguniform(1e-4, 1e-2),
-        },
-        {
-            "feature_union__time_series_features__time_series_homology__slope": UniformSlope(
-                min_slope=-2, max_slope=2
-            ),
-            "feature_union__time_series_features__persistence_imager__base_estimator__bandwidth": loguniform(
-                1e-3, 1e-1
-            ),
-            "svc__kernel": ["linear"],
-            "svc__C": loguniform(1e-2, 1e1),
-        },
+        hyperparams_slope | hyperparam_dict
+        for hyperparam_dict in hyperparams_tda_common_svc
     ],
     "baseline_bjornsdottir": {
         "rf__n_estimators": [
