@@ -108,7 +108,7 @@ hyperparams_tda_common_svc = [
 hyperparams_slope = {
     "feature_union__time_series_features__time_series_homology__slope": UniformSlopeSym(
         min_slope=0.15, max_slope=4
-    )
+    ),
 }
 
 hyperparams = {
