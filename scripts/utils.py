@@ -77,6 +77,7 @@ class PersistenceProcessor(BaseEstimator, TransformerMixin):
         pass
 
     def fit(self, X, y=None):  # noqa: ARG002
+        self._is_fitted_ = True
         return self
 
     def transform(self, X):
@@ -106,11 +107,11 @@ class PersistenceImageProcessor(BaseEstimator, TransformerMixin):
         self.feature_range = feature_range
 
     def fit(self, X, y=None):  # noqa: ARG002
-        self.min_x, self.max_x = X.min(), X.max()
+        self.min_x_, self.max_x_ = X.min(), X.max()
         return self
 
     def transform(self, X):
-        X_std = (X - self.min_x) / (self.max_x - self.min_x)
+        X_std = (X - self.min_x_) / (self.max_x_ - self.min_x_)
         X_scaled = (
             X_std * (self.feature_range[1] - self.feature_range[0])
             + self.feature_range[0]
