@@ -299,7 +299,7 @@ def get_pipeline(
                     PCA(
                         svd_solver="randomized",
                         whiten=True,
-                        n_components=250,
+                        n_components=750 if use_extended_persistence else 250,
                         random_state=rng.integers(low=0, high=2**32),
                     ),
                 ),
