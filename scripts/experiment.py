@@ -119,7 +119,10 @@ def parse_args():
         "--n-jobs",
         type=int,
         default=1,
-        help=("Number of jobs to run in parallel in `GridSearchCV`."),
+        help=(
+            "Number of jobs to run in parallel in `GridSearchCV` or "
+            "`RandomizedSearchCV`."
+        ),
     )
     parser.add_argument(
         "--verbose",
@@ -167,7 +170,8 @@ def validate_model_name(model_name: str) -> None:
         if model_name != "baseline_bjornsdottir":
             raise ValueError(
                 "Invalid model name for Björnsdottir-baseline; model name "
-                "must be 'baseline_bjornsdottir'."
+                f"must be 'baseline_bjornsdottir', but got {model_name} "
+                "instead."
             )
     elif model_name.startswith("baseline_raatikainen"):
         parts = model_name.split("_")
@@ -183,10 +187,10 @@ def validate_model_name(model_name: str) -> None:
             )
     else:
         raise ValueError(
-            "Invalid choice of `model_name`; must be one of "
-            "`'tda_experiment_<horizontal|sloped|sigmoid|arctan>_"
-            "<ordinary|extended>'`, `'baseline_bjornsdottir'`, and "
-            "`'baseline_raatikainen_<rf|svc>'`."
+            "Invalid model name; must be one of `'tda_experiment_"
+            "<horizontal|sloped|sigmoid|arctan>_<ordinary|extended>'`, "
+            "`'baseline_bjornsdottir'`, and `'baseline_raatikainen_"
+            f"<rf|svc>'`, but got {model_name} instead."
         )
 
 
