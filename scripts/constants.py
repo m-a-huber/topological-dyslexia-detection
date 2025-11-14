@@ -90,7 +90,7 @@ admissible_model_kinds_raatikainen = [
 
 hyperparams_tda_common_svc = [
     {
-        "feature_union__time_series_features__persistence_imager__base_estimator__bandwidth": loguniform(
+        "feature_union__topological_features__persistence_imager__base_estimator__bandwidth": loguniform(
             1e-3, 1e-1
         ),
         "svc__kernel": ["rbf"],
@@ -98,7 +98,7 @@ hyperparams_tda_common_svc = [
         "svc__gamma": loguniform(1e-4, 1e-2),
     },
     {
-        "feature_union__time_series_features__persistence_imager__base_estimator__bandwidth": loguniform(
+        "feature_union__topological_features__persistence_imager__base_estimator__bandwidth": loguniform(
             1e-3, 1e-1
         ),
         "svc__kernel": ["linear"],
@@ -106,7 +106,7 @@ hyperparams_tda_common_svc = [
     },
 ]
 hyperparams_slope = {
-    "feature_union__time_series_features__time_series_homology__slope": UniformSlopeSym(
+    "feature_union__topological_features__time_series_homology__slope": UniformSlopeSym(
         min_slope=0.15, max_slope=4
     ),
 }
