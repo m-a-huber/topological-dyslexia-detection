@@ -26,26 +26,6 @@ subjects_non_dys_l1 = [
     "22",
 ]  # P01, P13, P14, P17 excluded because of poor calibration or attention disorder
 
-subjects_non_dys_l2 = [
-    "42",
-    "43",
-    "44",
-    "45",
-    "46",
-    "47",
-    "48",
-    "49",
-    "50",
-    "51",
-    "52",
-    "53",
-    "54",
-    "55",
-    "56",
-    "57",
-    "58",
-]
-
 subjects_dys = [
     "23",
     "24",
@@ -66,6 +46,26 @@ subjects_dys = [
     "40",
     "41",
 ]  # P32 excluded because no dyslexia screening result
+
+subjects_non_dys_l2 = [
+    "42",
+    "43",
+    "44",
+    "45",
+    "46",
+    "47",
+    "48",
+    "49",
+    "50",
+    "51",
+    "52",
+    "53",
+    "54",
+    "55",
+    "56",
+    "57",
+    "58",
+]
 
 # params for input validation
 
