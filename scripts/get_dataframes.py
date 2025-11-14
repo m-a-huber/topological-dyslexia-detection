@@ -1,42 +1,11 @@
 from pathlib import Path
 
-import numpy as np
-import numpy.typing as npt
 import polars as pl
 
 from scripts import constants
 
 
-def parse_fixation_report(
-    fixation_report_path: Path,
-) -> pl.DataFrame:
-    """Creates a dataframe from a fixation report given as in the directory
-    `FixationReports` of CopCo.
-
-    Args:
-        fixation_report_path (Path): Path to the fixation report to parse.
-
-    Returns:
-        pl.DataFrame: Dataframe containing the data from the fixation report.
-    """
-    with open(fixation_report_path, "r", encoding="utf-8-sig") as f_in:
-        header_line = f_in.readline()
-    header = [
-        col_name.strip('"') for col_name in header_line.strip().split("\t")
-    ]
-    df = pl.read_csv(
-        fixation_report_path,
-        separator="\t",
-        skip_lines=1,
-        quote_char=None,
-        infer_schema=False,
-        has_header=False,
-        new_columns=header,
-    )
-    return df
-
-
-def make_df(
+def get_df(
     model_class: str,
     min_n_fixations: int,
     include_l2: bool,
@@ -86,7 +55,7 @@ def make_df(
                 fixation_report_path = Path(
                     f"./data_copco/FixationReports/FIX_report_P{subject}.txt"
                 )
-                df_subject = parse_fixation_report(fixation_report_path)
+                df_subject = _parse_fixation_report(fixation_report_path)
                 # Create column containing reader ID
                 df_subject = df_subject.with_columns(
                     pl.lit(subject).alias("READER_ID")
@@ -288,7 +257,7 @@ def make_df(
                 fixation_report_path = Path(
                     f"./data_copco/FixationReports/FIX_report_P{subject}.txt"
                 )
-                df_subject = parse_fixation_report(fixation_report_path)
+                df_subject = _parse_fixation_report(fixation_report_path)
                 # Select relevant columns
                 df_subject = df_subject.select(
                     [
@@ -351,47 +320,33 @@ def make_df(
     return df_out
 
 
-def get_X_y_groups(
-    df: pl.DataFrame,
-    model_class: str,
-) -> tuple[list[npt.NDArray] | npt.NDArray, npt.NDArray, npt.NDArray]:
-    """Given a dataframe produced by `make_dataframes.make_df`, this function
-    creates `X`, `y` and `groups` for subsequent passing to
-    `StratifiedGroupKFold`.
+def _parse_fixation_report(
+    fixation_report_path: Path,
+) -> pl.DataFrame:
+    """Creates a dataframe from a fixation report given as in the directory
+    `FixationReports` of CopCo.
 
     Args:
-        df (pl.DataFrame): Input dataframe, as created by
-            `make_dataframes.make_df`.
-        model_class (str): The class of the model. Must be one of
-            `'tda_experiment'`, `'baseline_bjornsdottir'` and
-            `'baseline_raatikainen'`.
+        fixation_report_path (Path): Path to the fixation report to parse.
 
     Returns:
-        tuple[list[npt.NDArray] | npt.NDArray, npt.NDArray, npt.NDArray]:
-            Tuple containing `X`, `y` and `groups`.
+        pl.DataFrame: Dataframe containing the data from the fixation report.
     """
-    if model_class == "tda_experiment":
-        X = [
-            np.array(time_series, dtype=float)
-            for time_series in df["time_series"].to_list()
-        ]
-    elif model_class == "baseline_bjornsdottir":
-        X = (
-            df.drop("READER_ID", "LABEL", "TRIAL_ID", "SAMPLE_ID")
-            .to_numpy()
-            .astype(float)
-        )
-    elif model_class == "baseline_raatikainen":
-        X = df.drop("READER_ID", "LABEL").to_numpy()
-    else:
-        raise ValueError(
-            "Invalid choice of `model_class`; must be one of "
-            "`'tda_experiment'`, `'baseline_bjornsdottir'` and "
-            "`'baseline_raatikainen'`."
-        )
-    y = df["LABEL"].to_numpy().astype(int)
-    groups = df["READER_ID"].to_numpy().astype(int)
-    return X, y, groups
+    with open(fixation_report_path, "r", encoding="utf-8-sig") as f_in:
+        header_line = f_in.readline()
+    header = [
+        col_name.strip('"') for col_name in header_line.strip().split("\t")
+    ]
+    df = pl.read_csv(
+        fixation_report_path,
+        separator="\t",
+        skip_lines=1,
+        quote_char=None,
+        infer_schema=False,
+        has_header=False,
+        new_columns=header,
+    )
+    return df
 
 
 def _is_sorted(lst):
