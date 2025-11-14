@@ -1,11 +1,8 @@
 from pathlib import Path
-from typing import Optional
 
+import numpy as np
+import numpy.typing as npt
 import polars as pl
-from sklearn.model_selection import (
-    StratifiedKFold,
-    train_test_split,
-)
 
 from scripts import constants
 
@@ -54,10 +51,9 @@ def make_df(
     fixation sequences of length less than `min_n_fixations` will be discarded.
 
     Args:
-        model_class (str): Name of the model. Must be one of
-            `'tda_experiment'`, `'baseline_bjornsdottir'`,
-            `'baseline_raatikainen'`, `'baseline_benfatto'` and
-            `'baseline_haller'`.
+        model_class (str): The class of the model. Must be one of
+            `'tda_experiment'`, `'baseline_bjornsdottir'` and
+            `'baseline_raatikainen'`.
         min_n_fixations (int): If greater than 1 and `model_class` is set to
             `"tda_experiment"`, fixation sequences of length less than
             `min_n_fixations` will be discarded. Ignored otherwise.
@@ -68,13 +64,16 @@ def make_df(
             Defaults to True.
         overwrite (bool, optional): Whether or not to overwrite existing output
             files. Defaults to False.
-        seed (Optional[int], optional): Random seed for reproducibility.
-            Defaults to None.
 
     Returns:
         pl.DataFrame: Output dataframe.
     """
-    df_out_path = Path(f"./dataframes/dataframe_{model_class}.json")
+    df_file_name = f"dataframe_{model_class}_min_n_fixations_{min_n_fixations}"
+    if include_l2:
+        df_file_name += "_with_l2"
+    else:
+        df_file_name += "_without_l2"
+    df_out_path = Path(f"./dataframes/{df_file_name}.json")
     subjects = constants.subjects_non_dys_l1 + constants.subjects_dys
     if include_l2:
         subjects += constants.subjects_non_dys_l2
@@ -182,6 +181,15 @@ def make_df(
                         ["current_fix_start", "current_fix_x", "current_fix_y"]
                     ).alias("time_series")
                 )
+            )
+            # Shift each time series to start at t=0
+            df_out = df_out.with_columns(
+                pl.col("time_series")
+                .map_elements(
+                    _shift_time_series,
+                    return_dtype=pl.List(pl.List(pl.Float64)),
+                )
+                .alias("time_series")
             )
             # Verify that number of rows is correct
             assert len(df_out) == df_all["SAMPLE_ID"].unique().len()
@@ -320,16 +328,11 @@ def make_df(
                 )
                 data_dict["total_fixation_count"].append(len(df_subject))
             df_out = pl.from_dict(data_dict)
-        elif model_class == "baseline_benfatto":
-            raise NotImplementedError()
-        elif model_class == "baseline_haller":
-            raise NotImplementedError()
         else:
             raise ValueError(
                 "Invalid choice of `model_class`; must be one of "
-                "`'tda_experiment'`, `'baseline_bjornsdottir'`, "
-                "`'baseline_raatikainen'`, `'baseline_benfatto'` and "
-                "`'baseline_haller'`."
+                "`'tda_experiment'`, `'baseline_bjornsdottir'` and "
+                "`'baseline_raatikainen'`."
             )
         df_out_path.parent.mkdir(parents=True, exist_ok=True)
         df_out.write_json(df_out_path)
@@ -348,80 +351,56 @@ def make_df(
     return df_out
 
 
-def get_dfs_splits(
+def get_X_y_groups(
     df: pl.DataFrame,
-    percentage_val_split: float,
-    n_splits_train_test: int,
-    check_dfs: bool = False,
-    random_state: Optional[int] = None,
-) -> tuple[pl.DataFrame, list[pl.DataFrame]]:
+    model_class: str,
+) -> tuple[list[npt.NDArray] | npt.NDArray, npt.NDArray, npt.NDArray]:
     """Given a dataframe produced by `make_dataframes.make_df`, this function
-    first determines a validation split of the dataframe, and then
-    splits the portion into `n_splits_train_test` splits. These are such that
-    the validation split contains the data from roughly `percentage_val_split`
-    percents of all readers, and such that each subsequent split contains
-    roughly an equal number of unique reader IDs. Both of these procedures are
-    done in a stratified fashion, so that both the validation split as well as
-    each of the subsequent splits contain roughly the same proportion of reader
-    IDs corresponding to a reader with dyslexia. Moreover, it is such that
-    every reader ID appears in precisely one split.
+    creates `X`, `y` and `groups` for subsequent passing to
+    `StratifiedGroupKFold`.
 
     Args:
-        df (pl.DataFrame): Input dataframe.
-        percentage_val_split (float): Percentage of reader IDs to appear in the
-            validation split.
-        n_splits_train_test (int): Number of splits to create from
-            non-validation data.
-        check_dfs (bool, optional): Whether or not to explicitly verify that
-            each reader ID appears in exactly one split. Defaults to False.
-        random_state (Optional[int], optional): Random seed for
-            reproducibility. Defaults to None.
+        df (pl.DataFrame): Input dataframe, as created by
+            `make_dataframes.make_df`.
+        model_class (str): The class of the model. Must be one of
+            `'tda_experiment'`, `'baseline_bjornsdottir'` and
+            `'baseline_raatikainen'`.
 
     Returns:
-        tuple[pl.DataFrame, list[pl.DataFrame]]: Tuple containing the dataframe
-            corresponding to the validation split, and a list containing the
-            dataframes corresponding to each subsequent split.
+        tuple[list[npt.NDArray] | npt.NDArray, npt.NDArray, npt.NDArray]:
+            Tuple containing `X`, `y` and `groups`.
     """
-    # Select relevant sub-dataframe
-    df_reader_ids_labels = df.select(
-        pl.col("READER_ID"), pl.col("LABEL")
-    ).unique(maintain_order=True)
-    # Create validation split
-    df_aux_train_test, df_aux_val = train_test_split(
-        df_reader_ids_labels,
-        test_size=percentage_val_split,
-        stratify=df_reader_ids_labels["LABEL"],
-        random_state=random_state,
-    )
-    # Create splits of non-validation data
-    skf = StratifiedKFold(
-        n_splits=n_splits_train_test,
-        shuffle=True,
-        random_state=random_state,
-    )
-    dfs_aux_train_test = [
-        df_aux_train_test[split_idxs]
-        for _, split_idxs in skf.split(
-            df_aux_train_test, df_aux_train_test["LABEL"]
+    if model_class == "tda_experiment":
+        X = [
+            np.array(time_series, dtype=float)
+            for time_series in df["time_series"].to_list()
+        ]
+    elif model_class == "baseline_bjornsdottir":
+        X = (
+            df.drop("READER_ID", "LABEL", "TRIAL_ID", "SAMPLE_ID")
+            .to_numpy()
+            .astype(float)
         )
-    ]
-    reader_ids_val = df_aux_val["READER_ID"]
-    reader_idss_train_test = [
-        df_aux_train_test["READER_ID"]
-        for df_aux_train_test in dfs_aux_train_test
-    ]
-    df_val = df.filter(pl.col("READER_ID").is_in(reader_ids_val))
-    dfs_train_test = [
-        df.filter(pl.col("READER_ID").is_in(reader_ids_train_test))
-        for reader_ids_train_test in reader_idss_train_test
-    ]
-    if check_dfs:  # Checks that no reader appears in more than one split
-        dfs_all = [df_val, *dfs_train_test]
-        reader_ids_sets = [set(df["READER_ID"].unique()) for df in dfs_all]
-        assert set().union(*reader_ids_sets) == set(
-            df["READER_ID"].unique()
-        ), "At least one reader ID appears in no split."
-        assert len(set().union(*reader_ids_sets)) == sum(
-            len(s) for s in reader_ids_sets
-        ), "At least one reader ID appears in more than one split."
-    return df_val, dfs_train_test
+    elif model_class == "baseline_raatikainen":
+        X = df.drop("READER_ID", "LABEL").to_numpy()
+    else:
+        raise ValueError(
+            "Invalid choice of `model_class`; must be one of "
+            "`'tda_experiment'`, `'baseline_bjornsdottir'` and "
+            "`'baseline_raatikainen'`."
+        )
+    y = df["LABEL"].to_numpy().astype(int)
+    groups = df["READER_ID"].to_numpy().astype(int)
+    return X, y, groups
+
+
+def _is_sorted(lst):
+    # Helper to check if a list is sorted in strictly increasing manner
+    return all(lst[i] < lst[i + 1] for i in range(len(lst) - 1))
+
+
+def _shift_time_series(ts):
+    # Helper to shift time series to start at t=0
+    assert _is_sorted([t for t, _, _ in ts])
+    t_min = ts[0][0]
+    return [[t - t_min, x, y] for t, x, y in ts]
