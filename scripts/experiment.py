@@ -1,28 +1,29 @@
 import argparse
 import json
-from collections import defaultdict
 from pathlib import Path
-from typing import Optional
 
 import gudhi.representations as gdrep
 import numpy as np
-import numpy.typing as npt
 import polars as pl
 from sklearn.decomposition import PCA
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import average_precision_score, roc_auc_score
+from sklearn.metrics import (
+    accuracy_score,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+)
 from sklearn.model_selection import (
     GridSearchCV,
-    PredefinedSplit,
     RandomizedSearchCV,
+    StratifiedGroupKFold,
 )
 from sklearn.pipeline import FeatureUnion, Pipeline
 from sklearn.preprocessing import FunctionTransformer, MinMaxScaler
 from sklearn.svm import SVC
-from threadpoolctl import threadpool_limits
 from tqdm import tqdm
 
-from scripts import constants, make_dataframes
+from scripts import constants, get_data, get_dataframes
 from scripts.time_series_homology import TimeSeriesHomology
 from scripts.utils import (
     ListTransformer,
@@ -57,34 +58,18 @@ def parse_args():
         ),
     )
     parser.add_argument(
-        "--include-l2",
-        dest="include_l2",
-        action="store_true",
-        help="Include CopCo-L2-readers",
-    )
-    parser.add_argument(
         "--exclude-l2",
-        dest="include_l2",
-        action="store_false",
+        action="store_true",
         help="Exclude CopCo-L2-readers",
     )
     parser.add_argument(
-        "--n-repeats",
-        type=int,
-        default=10,
-        help=("Number of times to repeat evaluation"),
-    )
-    parser.add_argument(
-        "--percentage-val-split",
-        type=float,
-        default=0.1,
-        help=("Percentage of reader IDs to be used for validation split"),
-    )
-    parser.add_argument(
-        "--n-splits-train-test",
+        "--n-splits",
         type=int,
         default=5,
-        help=("Number of splits to break up non-validation data into"),
+        help=(
+            "Number of splits to be used in nested CV (same number will be "
+            "used in inner and outer loop)"
+        ),
     )
     parser.add_argument(
         "--with-n-fix",
@@ -109,7 +94,7 @@ def parse_args():
     parser.add_argument(
         "--n-iter",
         type=int,
-        default=75,
+        default=100,
         help=(
             "Number of iterations for randomized hyperparameter search "
             "(ignored when running baseline models)"
@@ -143,7 +128,6 @@ def parse_args():
         default=42,
         help="Seed for reproducibility (int or None)",
     )
-    parser.set_defaults(include_l2=True)
     return parser.parse_args()
 
 
@@ -194,73 +178,6 @@ def validate_model_name(model_name: str) -> None:
         )
 
 
-def get_best_params(
-    X_train: npt.NDArray,
-    X_val: npt.NDArray,
-    y_train: npt.NDArray,
-    y_val: npt.NDArray,
-    pipeline: Pipeline,
-    hyperparams: dict[str, list[float]],
-    scoring: str,
-    search_kind: str,  # either 'grid' or 'random'
-    n_iter: int,  # no. of iterations for randomized search
-    n_jobs: int | None,
-    random_state: Optional[int],
-) -> dict[str, list[float]]:
-    """Function performing grid search to tune model parameters by training on
-    `X_train` and evaluating on `X_val` for all possible combinations of
-    hyperparameters. Returns a dictionary containing the best combination of
-    hyperparameters found."""
-    ps = PredefinedSplit(
-        np.concatenate(
-            [
-                -np.ones(len(X_train), dtype=int),
-                np.zeros(len(X_val), dtype=int),
-            ]
-        )
-    )
-    if search_kind == "grid":
-        search = GridSearchCV(
-            pipeline,
-            hyperparams,
-            cv=ps,
-            scoring=scoring,
-            n_jobs=n_jobs,
-            refit=False,
-        )
-        try:
-            X_train_val = np.concatenate([X_train, X_val])
-        except ValueError:
-            X_train_val = X_train + X_val
-        y_train_val = np.concatenate([y_train, y_val])
-        with threadpool_limits(limits=1):
-            search.fit(X_train_val, y_train_val)
-    elif search_kind == "random":
-        search = RandomizedSearchCV(
-            pipeline,
-            hyperparams,
-            n_iter=n_iter,
-            cv=ps,
-            scoring=scoring,
-            n_jobs=n_jobs,
-            refit=False,
-            random_state=random_state,
-        )
-        try:
-            X_train_val = np.concatenate([X_train, X_val])
-        except ValueError:
-            X_train_val = X_train + X_val
-        y_train_val = np.concatenate([y_train, y_val])
-        with threadpool_limits(limits=1):
-            search.fit(X_train_val, y_train_val)
-    else:
-        raise ValueError(
-            "Invalid value for `search_kind`; `search_kind` must be either "
-            f"`'grid'` or `'random'`, but got {search_kind} instead."
-        )
-    return search.best_params_
-
-
 def get_pipeline(
     args: argparse.Namespace,
     rng: np.random.Generator,
@@ -269,7 +186,7 @@ def get_pipeline(
         parts = args.model_name.split("_")
         filtration_type, persistence_type = parts[-2:]
         use_extended_persistence = persistence_type == "extended"
-        pipeline = Pipeline(
+        pipeline_topological_features = Pipeline(
             [
                 (
                     "time_series_scaler",
@@ -307,19 +224,11 @@ def get_pipeline(
                         random_state=rng.integers(low=0, high=2**32),
                     ),
                 ),
-                (
-                    "svc",
-                    SVC(
-                        class_weight="balanced" if args.balanced else None,
-                        probability=True,
-                        random_state=rng.integers(low=0, high=2**32),
-                    ),
-                ),
             ]
         )
-        pipeline_no_svc, svc = pipeline[:-1], pipeline[-1]
         if args.with_n_fix:
-            extra_feature_transformer = Pipeline(
+            # transformer that extracts length of each time series
+            pipeline_extra_features = Pipeline(
                 [
                     (
                         "get_lengths",
@@ -333,13 +242,14 @@ def get_pipeline(
                 ]
             )
         else:
-            extra_feature_transformer = FunctionTransformer(
+            # dummy transformer that does nothing
+            pipeline_extra_features = FunctionTransformer(
                 lambda X: np.empty(shape=(len(X), 0), dtype=float)
             )
         pipeline_union = FeatureUnion(
             [
-                ("time_series_features", pipeline_no_svc),
-                ("extra_feature", extra_feature_transformer),
+                ("topological_features", pipeline_topological_features),
+                ("extra_features", pipeline_extra_features),
             ]
         )
         pipeline = Pipeline(
@@ -348,7 +258,14 @@ def get_pipeline(
                     "feature_union",
                     pipeline_union,
                 ),
-                ("svc", svc),
+                (
+                    "svc",
+                    SVC(
+                        class_weight="balanced" if args.balanced else None,
+                        probability=True,
+                        random_state=rng.integers(low=0, high=2**32),
+                    ),
+                ),
             ]
         )
     elif args.model_name == "baseline_bjornsdottir":
@@ -408,6 +325,29 @@ def get_pipeline(
     return pipeline
 
 
+def get_split_idxs(X, y, groups, n_splits, rng):
+    split_idxs_ok = False
+    while not split_idxs_ok:
+        if args.verbose:
+            tqdm.write(
+                f"Finding splitting of data into {args.n_splits} splits..."
+            )
+        splitter = StratifiedGroupKFold(
+            n_splits=n_splits,
+            shuffle=True,
+            random_state=rng.integers(low=0, high=2**32),
+        )
+        split_idxs = [test_idx for _, test_idx in splitter.split(X, y, groups)]
+        n_classes_per_split = np.array(
+            [len(np.unique(y[split_idx])) for split_idx in split_idxs]
+        )
+        if (n_classes_per_split > 1).all():
+            split_idxs_ok = True
+    if args.verbose:
+        tqdm.write(f"Found splitting of data into {args.n_splits} splits.")
+    return split_idxs
+
+
 def main(
     args: argparse.Namespace,
 ) -> None:
@@ -415,21 +355,23 @@ def main(
     tqdm.write(f" RUNNING MODEL '{args.model_name}' ".center(120, "*"))
     rng = np.random.default_rng(seed=args.seed)
     outdir = "outfiles"
+    if args.exclude_l2:
+        outdir += "_without_l2"
     if args.balanced:
         outdir += "_balanced"
-    if args.truncate:
+    if args.truncate < 1.0:
         outdir += f"_truncate_{args.truncate}"
     if args.with_n_fix:
         outdir += "_with_n_fix"
-    result_file_path = Path(
-        f"./{outdir}/results_{args.model_name}_{args.n_repeats}_repeats_"
-        f"seed_{args.seed}.json"
+    cv_results_file_path = Path(
+        f"./{outdir}/cv_results_{args.model_name}_seed_{args.seed}.json"
     )
-    if not result_file_path.exists() or args.overwrite:
+    if not cv_results_file_path.exists() or args.overwrite:
         if args.model_name.startswith("tda_experiment"):
             model_class = "tda_experiment"
+            filtration_type = args.model_name.split("_")[-2]
             hyperparams = constants.hyperparams[
-                "_".join(args.model_name.split("_")[:3])
+                "_".join([model_class, filtration_type])
             ]
             search_kind = "random"
             pipeline = get_pipeline(args, rng)
@@ -443,10 +385,10 @@ def main(
             hyperparams = constants.hyperparams[args.model_name]
             search_kind = "grid"
             pipeline = get_pipeline(args, rng)
-        df = make_dataframes.make_df(
+        df = get_dataframes.get_df(
             model_class=model_class,
             min_n_fixations=args.min_n_fixations,
-            include_l2=args.include_l2,
+            include_l2=not args.exclude_l2,
             verbose=args.verbose,
             overwrite=args.overwrite,
         )
@@ -468,159 +410,121 @@ def main(
             df = df_with_len.filter(
                 pl.col("length").is_between(min_len, max_len)
             ).drop("length")
-        result_dict = defaultdict(dict)
-        for idx_repeat in tqdm(
-            range(args.n_repeats),
-            desc=f"Repeating evaluation of model {args.model_name}",
+        X, y, groups = get_data.get_X_y_groups(
+            df=df,
+            model_class=model_class,
+        )
+        split_idxs = get_split_idxs(
+            X=X,
+            y=y,
+            groups=groups,
+            n_splits=args.n_splits,
+            rng=rng,
+        )
+        # Verify that no reader ID appears in more than one split
+        reader_ids_per_split = [
+            set(groups[split_idx]) for split_idx in split_idxs
+        ]
+        assert len(set().union(*reader_ids_per_split)) == sum(
+            map(len, reader_ids_per_split)
+        )
+        cv_results = {
+            "roc_auc": [],
+            "accuracy": [],
+            "precision": [],
+            "recall": [],
+            "best_params_list": [],
+        }
+        for test_fold_idx, test_idxs in tqdm(
+            enumerate(split_idxs), total=len(split_idxs)
         ):
-            df_val, dfs_train_test = make_dataframes.get_dfs_splits(
-                df=df,
-                percentage_val_split=args.percentage_val_split,
-                n_splits_train_test=args.n_splits_train_test,
-                random_state=rng.integers(low=0, high=2**32),
-            )
-            roc_aucs, pr_aucs = [], []
-            for i, _ in tqdm(
-                enumerate(dfs_train_test),
-                desc="Iterating over non-validation folds",
-                total=args.n_splits_train_test,
-                leave=False,
-            ):
-                df_train = pl.concat(
-                    [
-                        dfs_train_test[j]
-                        for j, _ in enumerate(dfs_train_test)
-                        if j != i
-                    ]
-                )
-                df_test = dfs_train_test[i]
-                if args.model_name.startswith("tda_experiment"):
-                    X_train = [
-                        np.array(x, dtype=float)
-                        for x in df_train["time_series"].to_list()
-                    ]
-                    X_test = [
-                        np.array(x, dtype=float)
-                        for x in df_test["time_series"].to_list()
-                    ]
-                else:
-                    X_train = df_train.drop(
-                        "READER_ID",
-                        "LABEL",
-                        "TRIAL_ID",
-                        "SAMPLE_ID",
-                        strict=False,
-                    ).to_numpy()
-                    X_test = df_test.drop(
-                        "READER_ID",
-                        "LABEL",
-                        "TRIAL_ID",
-                        "SAMPLE_ID",
-                        strict=False,
-                    ).to_numpy()
-                y_train = df_train["LABEL"].to_numpy()
-                y_test = df_test["LABEL"].to_numpy()
-                if i == 0:
-                    if args.model_name.startswith("tda_experiment"):
-                        X_val = [
-                            np.array(x, dtype=float)
-                            for x in df_val["time_series"].to_list()
+            try:  # in case X is a NumPy-array
+                X_test = X[test_idxs]
+            except TypeError:  # fallback in case X is a list
+                X_test = [X[i] for i in test_idxs]
+            y_test = y[test_idxs]
+            # Optimize hyperparams
+            cv = (
+                (
+                    np.concatenate(  # train indices
+                        [
+                            train_idx
+                            for train_fold_idx, train_idx in enumerate(
+                                split_idxs
+                            )
+                            if train_fold_idx
+                            not in [test_fold_idx, val_fold_idx]
                         ]
-                    else:
-                        X_val = df_val.drop(
-                            "READER_ID",
-                            "LABEL",
-                            "TRIAL_ID",
-                            "SAMPLE_ID",
-                            strict=False,
-                        ).to_numpy()
-                    y_val = df_val["LABEL"].to_numpy()
-                    if args.verbose:
-                        tqdm.write(
-                            "Optimizing hyperparameters on validation split..."
-                        )
-                    best_params = get_best_params(
-                        X_train=X_train,
-                        X_val=X_val,
-                        y_train=y_train,
-                        y_val=y_val,
-                        pipeline=pipeline,
-                        hyperparams=hyperparams,
-                        scoring="roc_auc",
-                        search_kind=search_kind,
-                        n_iter=args.n_iter,
-                        n_jobs=args.n_jobs,
-                        random_state=rng.integers(low=0, high=2**32),
-                    )
-                    if args.verbose:
-                        tqdm.write(
-                            "Finished optimizing hyperparameters on "
-                            "validation split."
-                        )
-                pipeline_best = pipeline.set_params(**best_params)
-                pipeline_best.fit(X_train, y_train)
-                y_proba = pipeline_best.predict_proba(X_test)
-                roc_aucs.append(roc_auc_score(y_test, y_proba[:, 1]))
-                pr_aucs.append(average_precision_score(y_test, y_proba[:, 1]))
-            result_dict[f"repeat {idx_repeat}"]["best_params"] = best_params
-            result_dict[f"repeat {idx_repeat}"]["roc_aucs"] = roc_aucs
-            result_dict[f"repeat {idx_repeat}"]["pr_aucs"] = pr_aucs
-            result_dict[f"repeat {idx_repeat}"]["roc_auc_mean"] = np.mean(
-                roc_aucs
+                    ),
+                    val_idx,  # val indices
+                )
+                for val_fold_idx, val_idx in enumerate(split_idxs)
+                if val_fold_idx != test_fold_idx
             )
-            result_dict[f"repeat {idx_repeat}"]["roc_auc_std"] = np.std(
-                roc_aucs
-            )
-            result_dict[f"repeat {idx_repeat}"]["pr_auc_mean"] = np.mean(
-                pr_aucs
-            )
-            result_dict[f"repeat {idx_repeat}"]["pr_auc_std"] = np.std(pr_aucs)
-        result_file_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(result_file_path, "w") as f_out:
-            json.dump(result_dict, f_out, indent=2)
+            if search_kind == "random":
+                inner_search = RandomizedSearchCV(
+                    estimator=pipeline,
+                    param_distributions=hyperparams,
+                    n_iter=args.n_iter,
+                    cv=cv,
+                    scoring="roc_auc",
+                    n_jobs=args.n_jobs,
+                    refit=True,
+                    verbose=int(args.verbose),
+                    random_state=rng.integers(low=0, high=2**32),
+                )
+            else:
+                inner_search = GridSearchCV(
+                    estimator=pipeline,
+                    param_grid=hyperparams,
+                    cv=cv,
+                    scoring="roc_auc",
+                    n_jobs=args.n_jobs,
+                    refit=True,
+                    verbose=int(args.verbose),
+                )
+            inner_search.fit(X, y)
+            # Evaluate best model on outer test fold
+            y_pred = inner_search.predict(X_test)
+            y_pred_proba = inner_search.predict_proba(X_test)[:, 1]
+            test_roc_auc = roc_auc_score(y_test, y_pred_proba)
+            test_accuracy = accuracy_score(y_test, y_pred)
+            test_precision = precision_score(y_test, y_pred)
+            test_recall = recall_score(y_test, y_pred)
+            cv_results["roc_auc"].append(test_roc_auc)
+            cv_results["accuracy"].append(test_accuracy)
+            cv_results["precision"].append(test_precision)
+            cv_results["recall"].append(test_recall)
+            # Retrieve best hyperparams
+            cv_results["best_params_list"].append(inner_search.best_params_)
+        cv_results_file_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(cv_results_file_path, "w") as f_out:
+            json.dump(cv_results, f_out, indent=2)
         if args.verbose:
             tqdm.write(
-                "Saved dictionary containing results and best hyperparameters "
-                f"for model `'{args.model_name}'` across {args.n_repeats} "
-                f"repeats to `{result_file_path}`."
+                f"Saved CV results for model `'{args.model_name}'`to "
+                f"`{cv_results_file_path}`."
             )
     else:
-        with open(result_file_path, "r") as f_in:
-            result_dict = json.load(f_in)
+        with open(cv_results_file_path, "r") as f_in:
+            cv_results = json.load(f_in)
         if args.verbose:
             tqdm.write(
-                "Found dictionary containing results and best hyperparameters "
-                f"for model `'{args.model_name}'` across {args.n_repeats} "
-                f"repeats at `{result_file_path}`; not overwriting."
+                f"Found CV results for model `'{args.model_name}'`at "
+                f"`{cv_results_file_path}`; not overwriting."
             )
-    roc_auc_means = [
-        result_dict[f"repeat {idx_repeat}"]["roc_auc_mean"]
-        for idx_repeat in range(args.n_repeats)
-    ]
-    roc_auc_stds = [
-        result_dict[f"repeat {idx_repeat}"]["roc_auc_std"]
-        for idx_repeat in range(args.n_repeats)
-    ]
-    roc_auc_mean_overall = np.mean(roc_auc_means)
-    roc_auc_std_overall = np.sqrt(np.mean(np.square(roc_auc_stds)))
-    pr_auc_means = [
-        result_dict[f"repeat {idx_repeat}"]["pr_auc_mean"]
-        for idx_repeat in range(args.n_repeats)
-    ]
-    pr_auc_stds = [
-        result_dict[f"repeat {idx_repeat}"]["pr_auc_std"]
-        for idx_repeat in range(args.n_repeats)
-    ]
-    pr_auc_mean_overall = np.mean(pr_auc_means)
-    pr_auc_std_overall = np.sqrt(np.mean(np.square(pr_auc_stds)))
-    tqdm.write(
-        f"ROC AUC: {roc_auc_mean_overall:.2f}\u00b1{roc_auc_std_overall:.2f} "
-        f"(mean & SD aggregated over {args.n_repeats} repetition means)"
-    )
-    tqdm.write(
-        f" PR AUC: {pr_auc_mean_overall:.2f}\u00b1{pr_auc_std_overall:.2f} "
-        f"(mean & SD aggregated over {args.n_repeats} repetition means)"
-    )
+    roc_auc_mean = np.mean(cv_results["roc_auc"])
+    roc_auc_std = np.std(cv_results["roc_auc"])
+    accuracy_mean = np.mean(cv_results["accuracy"])
+    accuracy_std = np.std(cv_results["accuracy"])
+    precision_mean = np.mean(cv_results["precision"])
+    precision_std = np.std(cv_results["precision"])
+    recall_mean = np.mean(cv_results["recall"])
+    recall_std = np.std(cv_results["recall"])
+    tqdm.write(f"ROC AUC: {roc_auc_mean:.2f}\u00b1{roc_auc_std:.2f}")
+    tqdm.write(f"Accuracy: {accuracy_mean:.2f}\u00b1{accuracy_std:.2f}")
+    tqdm.write(f"Precision: {precision_mean:.2f}\u00b1{precision_std:.2f}")
+    tqdm.write(f"Recall: {recall_mean:.2f}\u00b1{recall_std:.2f}")
     return
 
 

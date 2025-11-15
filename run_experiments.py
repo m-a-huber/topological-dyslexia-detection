@@ -1,11 +1,12 @@
-# ruff: noqa: E501
 import subprocess
 
-n_repeats = 10
-n_iter = 75
+n_splits = 10
+n_iter = 100
 n_jobs = 8
 
-common_flag = f"--n-repeats {n_repeats} --n-iter {n_iter} --n-jobs {n_jobs} --verbose"
+common_flag = (
+    f"--n-splits {n_splits} --n-iter {n_iter} --n-jobs {n_jobs} --verbose"
+)
 
 flag_sets = (
     f"--model-name baseline_bjornsdottir {common_flag}",
