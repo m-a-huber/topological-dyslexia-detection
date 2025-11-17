@@ -105,7 +105,8 @@ hyperparams_tda_common_svc = [
         "svc__C": loguniform(1e-2, 1e1),
     },
 ]
-hyperparams_slope = {
+
+hyperparams_tda_slope = {
     "feature_union__topological_features__time_series_homology__slope": UniformSlopeSym(
         min_slope=0.15, max_slope=4
     ),
@@ -114,15 +115,15 @@ hyperparams_slope = {
 hyperparams = {
     "tda_experiment_horizontal": hyperparams_tda_common_svc,
     "tda_experiment_sloped": [
-        hyperparams_slope | hyperparam_dict
+        hyperparams_tda_slope | hyperparam_dict
         for hyperparam_dict in hyperparams_tda_common_svc
     ],
     "tda_experiment_sigmoid": [
-        hyperparams_slope | hyperparam_dict
+        hyperparams_tda_slope | hyperparam_dict
         for hyperparam_dict in hyperparams_tda_common_svc
     ],
     "tda_experiment_arctan": [
-        hyperparams_slope | hyperparam_dict
+        hyperparams_tda_slope | hyperparam_dict
         for hyperparam_dict in hyperparams_tda_common_svc
     ],
     "baseline_bjornsdottir": {
