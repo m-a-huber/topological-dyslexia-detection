@@ -368,6 +368,7 @@ def main(
         f"./{outdir}/cv_results_{args.model_name}_seed_{args.seed}.json"
     )
     if not cv_results_file_path.exists() or args.overwrite:
+        # Get pipeline and corresponding hyperparameter distributions
         if args.model_name.startswith("tda_experiment"):
             model_class = "tda_experiment"
             filtration_type = args.model_name.split("_")[-2]
@@ -386,6 +387,7 @@ def main(
             hyperparams = constants.hyperparams[args.model_name]
             search_kind = "grid"
             pipeline = get_pipeline(args, rng)
+        # Get dataframe with data
         df = get_dataframes.get_df(
             model_class=model_class,
             min_n_fixations=args.min_n_fixations,
@@ -393,6 +395,7 @@ def main(
             verbose=args.verbose,
             overwrite=args.overwrite,
         )
+        # Truncate data if required
         if (
             args.model_name.startswith("tda_experiment")
             and args.truncate < 1.0
@@ -411,10 +414,12 @@ def main(
             df = df_with_len.filter(
                 pl.col("length").is_between(min_len, max_len)
             ).drop("length")
+        # Get array of samples, labels and reader IDs
         X, y, groups = get_data.get_X_y_groups(
             df=df,
             model_class=model_class,
         )
+        # Get indices of splits
         split_idxs = get_split_idxs(
             X=X,
             y=y,
@@ -429,6 +434,7 @@ def main(
         assert len(set().union(*reader_ids_per_split)) == sum(
             map(len, reader_ids_per_split)
         )
+        # Prepare dict for storing of results
         cv_results = {
             "roc_curve": [],
             "roc_auc": [],
@@ -437,15 +443,17 @@ def main(
             "accuracy": [],
             "best_params_list": [],
         }
+        # Perform nested CV
         for test_fold_idx, test_idxs in tqdm(
             enumerate(split_idxs), total=len(split_idxs)
         ):
+            # Get test split
             try:  # in case X is a NumPy-array
                 X_test = X[test_idxs]
             except TypeError:  # fallback in case X is a list
                 X_test = [X[i] for i in test_idxs]
             y_test = y[test_idxs]
-            # Optimize hyperparams
+            # Set up splits for hyperparameter optimization
             cv = (
                 (
                     np.concatenate(  # train indices
@@ -463,6 +471,7 @@ def main(
                 for val_fold_idx, val_idx in enumerate(split_idxs)
                 if val_fold_idx != test_fold_idx
             )
+            # Set up hyperparameter search
             if search_kind == "random":
                 inner_search = RandomizedSearchCV(
                     estimator=pipeline,
@@ -485,6 +494,7 @@ def main(
                     refit=True,
                     verbose=int(args.verbose),
                 )
+            # Optimize hyperparameters
             inner_search.fit(X, y)
             # Evaluate best model on outer test fold
             y_pred = inner_search.predict(X_test)
@@ -506,6 +516,7 @@ def main(
             cv_results["accuracy"].append(test_accuracy)
             # Retrieve best hyperparams
             cv_results["best_params_list"].append(inner_search.best_params_)
+        # Save CV results to disk
         cv_results_file_path.parent.mkdir(parents=True, exist_ok=True)
         with open(cv_results_file_path, "w") as f_out:
             json.dump(cv_results, f_out, indent=2)
@@ -522,6 +533,7 @@ def main(
                 f"Found CV results for model `'{args.model_name}'`at "
                 f"`{cv_results_file_path}`; not overwriting."
             )
+    # Print results
     roc_auc_mean = np.mean(cv_results["roc_auc"])
     roc_auc_std = np.std(cv_results["roc_auc"])
     pr_auc_mean = np.mean(cv_results["pr_auc"])
