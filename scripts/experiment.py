@@ -501,14 +501,18 @@ def main(
             y_pred_proba = inner_search.predict_proba(X_test)[:, 1]
             # Get ROC AUC metrics
             fp_rate, tp_rate, thresholds_roc = roc_curve(y_test, y_pred_proba)
-            cv_results["roc_curve"].append((fp_rate, tp_rate, thresholds_roc))
+            cv_results["roc_curve"].append(
+                (fp_rate.tolist(), tp_rate.tolist(), thresholds_roc.tolist())
+            )
             test_roc_auc = roc_auc_score(y_test, y_pred_proba)
             cv_results["roc_auc"].append(test_roc_auc)
             # Get precision-recall metrics
             precision, recall, thresholds_pr = precision_recall_curve(
                 y_test, y_pred_proba
             )
-            cv_results["pr_curve"].append((precision, recall, thresholds_pr))
+            cv_results["pr_curve"].append(
+                (precision.tolist(), recall.tolist(), thresholds_pr.tolist())
+            )
             test_pr_auc = average_precision_score(y_test, y_pred_proba)
             cv_results["pr_auc"].append(test_pr_auc)
             # Get accuracy
