@@ -9,9 +9,10 @@ from sklearn.decomposition import PCA
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import (
     accuracy_score,
-    precision_score,
-    recall_score,
+    average_precision_score,
+    precision_recall_curve,
     roc_auc_score,
+    roc_curve,
 )
 from sklearn.model_selection import (
     GridSearchCV,
@@ -429,10 +430,11 @@ def main(
             map(len, reader_ids_per_split)
         )
         cv_results = {
+            "roc_curve": [],
             "roc_auc": [],
+            "pr_curve": [],
+            "pr_auc": [],
             "accuracy": [],
-            "precision": [],
-            "recall": [],
             "best_params_list": [],
         }
         for test_fold_idx, test_idxs in tqdm(
@@ -487,14 +489,21 @@ def main(
             # Evaluate best model on outer test fold
             y_pred = inner_search.predict(X_test)
             y_pred_proba = inner_search.predict_proba(X_test)[:, 1]
+            # Get ROC AUC metrics
+            fp_rate, tp_rate, thresholds_roc = roc_curve(y_test, y_pred_proba)
+            cv_results["roc_curve"].append((fp_rate, tp_rate, thresholds_roc))
             test_roc_auc = roc_auc_score(y_test, y_pred_proba)
-            test_accuracy = accuracy_score(y_test, y_pred)
-            test_precision = precision_score(y_test, y_pred)
-            test_recall = recall_score(y_test, y_pred)
             cv_results["roc_auc"].append(test_roc_auc)
+            # Get precision-recall metrics
+            precision, recall, thresholds_pr = precision_recall_curve(
+                y_test, y_pred_proba
+            )
+            cv_results["pr_curve"].append((precision, recall, thresholds_pr))
+            test_pr_auc = average_precision_score(y_test, y_pred_proba)
+            cv_results["pr_auc"].append(test_pr_auc)
+            # Get accuracy
+            test_accuracy = accuracy_score(y_test, y_pred)
             cv_results["accuracy"].append(test_accuracy)
-            cv_results["precision"].append(test_precision)
-            cv_results["recall"].append(test_recall)
             # Retrieve best hyperparams
             cv_results["best_params_list"].append(inner_search.best_params_)
         cv_results_file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -515,16 +524,13 @@ def main(
             )
     roc_auc_mean = np.mean(cv_results["roc_auc"])
     roc_auc_std = np.std(cv_results["roc_auc"])
+    pr_auc_mean = np.mean(cv_results["pr_auc"])
+    pr_auc_std = np.std(cv_results["pr_auc"])
     accuracy_mean = np.mean(cv_results["accuracy"])
     accuracy_std = np.std(cv_results["accuracy"])
-    precision_mean = np.mean(cv_results["precision"])
-    precision_std = np.std(cv_results["precision"])
-    recall_mean = np.mean(cv_results["recall"])
-    recall_std = np.std(cv_results["recall"])
-    tqdm.write(f"ROC AUC: {roc_auc_mean:.2f}\u00b1{roc_auc_std:.2f}")
-    tqdm.write(f"Accuracy: {accuracy_mean:.2f}\u00b1{accuracy_std:.2f}")
-    tqdm.write(f"Precision: {precision_mean:.2f}\u00b1{precision_std:.2f}")
-    tqdm.write(f"Recall: {recall_mean:.2f}\u00b1{recall_std:.2f}")
+    tqdm.write(f"ROC AUC  | {roc_auc_mean:.2f}\u00b1{roc_auc_std:.2f}")
+    tqdm.write(f"PR AUC   | {pr_auc_mean:.2f}\u00b1{pr_auc_std:.2f}")
+    tqdm.write(f"Accuracy | {accuracy_mean:.2f}\u00b1{accuracy_std:.2f}")
     return
 
 
