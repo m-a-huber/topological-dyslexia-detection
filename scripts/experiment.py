@@ -113,7 +113,8 @@ def parse_args():
     parser.add_argument(
         "--verbose",
         "-v",
-        action="store_true",
+        type=int,
+        default=0,
         help="Display information during execution of program",
     )
     parser.add_argument(
@@ -392,7 +393,7 @@ def main(
             model_class=model_class,
             min_n_fixations=args.min_n_fixations,
             include_l2=not args.exclude_l2,
-            verbose=args.verbose,
+            verbose=bool(args.verbose),
             overwrite=args.overwrite,
         )
         # Truncate data if required
@@ -481,7 +482,7 @@ def main(
                     scoring="roc_auc",
                     n_jobs=args.n_jobs,
                     refit=True,
-                    verbose=int(args.verbose),
+                    verbose=args.verbose,
                     random_state=rng.integers(low=0, high=2**32),
                 )
             else:
@@ -492,7 +493,7 @@ def main(
                     scoring="roc_auc",
                     n_jobs=args.n_jobs,
                     refit=True,
-                    verbose=int(args.verbose),
+                    verbose=args.verbose,
                 )
             # Optimize hyperparameters
             inner_search.fit(X, y)
