@@ -40,6 +40,9 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
             persistences. Ignored if `use_extended_persistence` is set to
             `True`, since in that case all generators have finite lifespan.
             Defaults to `False`.
+        n_jobs (int, optional): Number of jobs to run in parallel. None means
+            `1` unless in a joblib.parallel_backend context. `-1` means using
+            all processors. Defaults to `None`.
     """
 
     def __init__(
