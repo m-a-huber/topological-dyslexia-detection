@@ -4,6 +4,7 @@ from pathlib import Path
 
 import gudhi.representations as gdrep
 import numpy as np
+import numpy.typing as npt
 import polars as pl
 from sklearn.decomposition import PCA
 from sklearn.ensemble import RandomForestClassifier
@@ -327,7 +328,13 @@ def get_pipeline(
     return pipeline
 
 
-def get_split_idxs(X, y, groups, n_splits, rng):
+def get_split_idxs(
+    X: list[npt.NDArray] | npt.NDArray,
+    y: npt.NDArray,
+    groups: npt.NDArray,
+    n_splits: int,
+    rng: np.random.Generator,
+) -> list[npt.NDArray]:
     split_idxs_ok = False
     while not split_idxs_ok:
         if args.verbose:
@@ -459,17 +466,17 @@ def main(
                 (
                     np.concatenate(  # train indices
                         [
-                            train_idx
-                            for train_fold_idx, train_idx in enumerate(
+                            train_idxs
+                            for train_fold_idx, train_idxs in enumerate(
                                 split_idxs
                             )
                             if train_fold_idx
                             not in [test_fold_idx, val_fold_idx]
                         ]
                     ),
-                    val_idx,  # val indices
+                    val_idxs,  # val indices
                 )
-                for val_fold_idx, val_idx in enumerate(split_idxs)
+                for val_fold_idx, val_idxs in enumerate(split_idxs)
                 if val_fold_idx != test_fold_idx
             )
             # Set up hyperparameter search
