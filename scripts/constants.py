@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-from scipy.stats import loguniform
+from scipy.stats import loguniform, randint, uniform
 
 from scripts.utils import UniformSlopeSym
 
@@ -67,26 +67,29 @@ subjects_non_dys_l2 = [
     "58",
 ]
 
-# params for input validation
+# constants for validation of arguments
 
 admissible_filtration_types_tda_experiment = [
     "horizontal",
     "sloped",
     "sigmoid",
-    "arctan",
 ]
 
-admissible_persistence_types_tda_experiment = [
-    "ordinary",
-    "extended",
-]
-
-admissible_model_kinds_raatikainen = [
+admissible_classifiers_tda_experiment = [
+    "svc",
     "rf",
+]
+
+admissible_classifiers_bjornsdottir = [
     "svc",
 ]
 
-# hyperparams for tuning
+admissible_classifiers_raatikainen = [
+    "svc",
+    "rf",
+]
+
+# hyperparameter distributions for tuning
 
 hyperparams_tda_common_svc = [
     {
@@ -106,27 +109,53 @@ hyperparams_tda_common_svc = [
     },
 ]
 
+hyperparams_tda_common_rf = [
+    {
+        "feature_union__topological_features__persistence_imager__base_estimator__bandwidth": loguniform(
+            1e-3, 1e-1
+        ),
+        "rf__n_estimators": randint(100, 2000),
+        "rf__max_features": [
+            "sqrt",
+            "log2",
+            None,
+            uniform(0.05, 0.95),
+        ],
+        "rf__max_depth": [
+            None,
+            *list(randint(3, 50).rvs(12, random_state=42)),
+        ],
+        "rf__min_samples_split": randint(2, 50),
+        "rf__min_samples_leaf": randint(1, 50),
+    }
+]
+
 hyperparams_tda_slope = {
     "feature_union__topological_features__time_series_homology__slope": UniformSlopeSym(
-        min_slope=0.15, max_slope=4
+        min_slope=0.5, max_slope=4
     ),
 }
 
 hyperparams = {
-    "tda_experiment_horizontal": hyperparams_tda_common_svc,
-    "tda_experiment_sloped": [
+    "tda_experiment_horizontal_svc": hyperparams_tda_common_svc,
+    "tda_experiment_sloped_svc": [
         hyperparams_tda_slope | hyperparam_dict
         for hyperparam_dict in hyperparams_tda_common_svc
     ],
-    "tda_experiment_sigmoid": [
+    "tda_experiment_sigmoid_svc": [
         hyperparams_tda_slope | hyperparam_dict
         for hyperparam_dict in hyperparams_tda_common_svc
     ],
-    "tda_experiment_arctan": [
+    "tda_experiment_horizontal_rf": hyperparams_tda_common_rf,
+    "tda_experiment_sloped_rf": [
         hyperparams_tda_slope | hyperparam_dict
-        for hyperparam_dict in hyperparams_tda_common_svc
+        for hyperparam_dict in hyperparams_tda_common_rf
     ],
-    "baseline_bjornsdottir": {
+    "tda_experiment_sigmoid_rf": [
+        hyperparams_tda_slope | hyperparam_dict
+        for hyperparam_dict in hyperparams_tda_common_rf
+    ],
+    "baseline_bjornsdottir_svc": {
         "rf__n_estimators": [
             1,
             10,
@@ -147,31 +176,6 @@ hyperparams = {
     },
     # Grids below were found in the code at
     # https://gitlab.jyu.fi/nieminen/dyslexia-detection-public/
-    "baseline_raatikainen_rf": {
-        "rf__n_estimators": [
-            5,
-            20,
-            30,
-            50,
-            80,
-            100,
-            300,
-            500,
-            1000,
-            2000,
-        ],
-        "rf__max_features": [
-            2,
-            3,
-            4,
-            5,
-            6,
-            8,
-            10,
-            15,
-            20,
-        ],
-    },
     "baseline_raatikainen_svc": {
         "svc__C": [
             1000,
@@ -195,6 +199,31 @@ hyperparams = {
             0.001,
             0.005,
             0.01,
+        ],
+    },
+    "baseline_raatikainen_rf": {
+        "rf__n_estimators": [
+            5,
+            20,
+            30,
+            50,
+            80,
+            100,
+            300,
+            500,
+            1000,
+            2000,
+        ],
+        "rf__max_features": [
+            2,
+            3,
+            4,
+            5,
+            6,
+            8,
+            10,
+            15,
+            20,
         ],
     },
 }

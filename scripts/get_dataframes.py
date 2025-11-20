@@ -6,24 +6,24 @@ from scripts import constants
 
 
 def get_df(
-    model_class: str,
+    model_name: str,
     min_n_fixations: int,
     include_l2: bool,
     verbose: bool = True,
     overwrite: bool = False,
 ) -> pl.DataFrame:
-    """Given a `model_class`, returns a `pl.DataFrame` whose first four
-    columns are `READER_ID`, `LABEL` and , possibly, `TRIAL_ID` and `SAMPLE_ID`
+    """Given a `model_name`, returns a `pl.DataFrame` whose first four columns
+    are `READER_ID`, `LABEL` and , possibly, `TRIAL_ID` and `SAMPLE_ID`
     (depending on the aggregation level of the corresponding model). The
     remaining columns contain the input data required for the corresponding
-    model. If `model_class` is set to `"tda_experiment"`, the `min_n_fixations`
+    model. If `model_name` is set to `"tda_experiment"`, the `min_n_fixations`
     fixation sequences of length less than `min_n_fixations` will be discarded.
 
     Args:
-        model_class (str): The class of the model. Must be one of
+        model_name (str): The class of the model. Must be one of
             `'tda_experiment'`, `'baseline_bjornsdottir'` and
             `'baseline_raatikainen'`.
-        min_n_fixations (int): If greater than 1 and `model_class` is set to
+        min_n_fixations (int): If greater than 1 and `model_name` is set to
             `"tda_experiment"`, fixation sequences of length less than
             `min_n_fixations` will be discarded. Ignored otherwise.
         include_l2 (bool): Whether or not to include data from CopCo-subjects
@@ -37,7 +37,7 @@ def get_df(
     Returns:
         pl.DataFrame: Output dataframe.
     """
-    df_file_name = f"dataframe_{model_class}_min_n_fixations_{min_n_fixations}"
+    df_file_name = f"dataframe_{model_name}_min_n_fixations_{min_n_fixations}"
     if include_l2:
         df_file_name += "_with_l2"
     else:
@@ -47,7 +47,7 @@ def get_df(
     if include_l2:
         subjects += constants.subjects_non_dys_l2
     if not df_out_path.exists() or overwrite:
-        if model_class == "tda_experiment":
+        if model_name == "tda_experiment":
             # Create df for all subjects
             subject_dfs = []
             for subject in subjects:
@@ -162,7 +162,7 @@ def get_df(
             )
             # Verify that number of rows is correct
             assert len(df_out) == df_all["SAMPLE_ID"].unique().len()
-        elif model_class == "baseline_bjornsdottir":
+        elif model_name == "baseline_bjornsdottir":
             # Create df for all subjects
             subject_dfs = []
             for subject in subjects:
@@ -243,7 +243,7 @@ def get_df(
             df_out = df_out.sort(
                 ["READER_ID", "LABEL", "TRIAL_ID", "SAMPLE_ID"]
             )
-        elif model_class == "baseline_raatikainen":
+        elif model_name == "baseline_raatikainen":
             data_dict = {
                 "READER_ID": [],
                 "LABEL": [],
@@ -297,24 +297,17 @@ def get_df(
                 )
                 data_dict["total_fixation_count"].append(len(df_subject))
             df_out = pl.from_dict(data_dict)
-        else:
-            raise ValueError(
-                "Invalid choice of `model_class`; must be one of "
-                "`'tda_experiment'`, `'baseline_bjornsdottir'` and "
-                "`'baseline_raatikainen'`."
-            )
         df_out_path.parent.mkdir(parents=True, exist_ok=True)
         df_out.write_json(df_out_path)
         if verbose:
             print(
-                f"Saved dataframe for model `'{model_class}'` to "
-                f"`{df_out_path}`."
+                f"Saved dataframe for model '{model_name}' to `{df_out_path}`."
             )
     else:
         df_out = pl.read_json(df_out_path)
         if verbose:
             print(
-                f"Found dataframe for model `'{model_class}'` at "
+                f"Found dataframe for model '{model_name}' at "
                 f"`{df_out_path}`; not overwriting."
             )
     return df_out

@@ -5,7 +5,6 @@ from pathlib import Path
 import gudhi.representations as gdrep
 import numpy as np
 import numpy.typing as npt
-import polars as pl
 from sklearn.decomposition import PCA
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import (
@@ -43,20 +42,49 @@ def parse_args():
         except ValueError:
             raise argparse.ArgumentTypeError(
                 "Invalid value for seed; seed must be either an integer or "
-                f"None, but got {value} instead."
+                f"None, but got '{value}' instead."
             )
 
     parser = argparse.ArgumentParser(
         description="Run TDA-experiment or baselines on CopCo"
     )
-    parser.add_argument("--model-name", help="Name of model to run")
+    parser.add_argument(
+        "--model-name",
+        help=(
+            "Name of model to run (must be one of 'tda_experiment', "
+            "'baseline_bjornsdottir' and 'baseline_raatikainen')"
+        ),
+    )
+    parser.add_argument(
+        "--filtration-type",
+        help=(
+            "Filtration type to use (must be one of 'horizontal', 'sloped' "
+            "and 'sigmoid'; ignored unless model name is 'tda_experiment')"
+        ),
+    )
+    parser.add_argument(
+        "--use-extended-persistence",
+        action="store_true",
+        help=(
+            "Compute extended persistence of time series (as opposed to "
+            "ordinary persistence; ignored unless model name is "
+            "'tda_experiment')"
+        ),
+    )
+    parser.add_argument(
+        "--classifier",
+        help=(
+            "Classifier to use (must be one of 'svc' and 'rf', depending on "
+            "the model name)"
+        ),
+    )
     parser.add_argument(
         "--min-n-fixations",
         type=int,
         default=5,
         help=(
             "Minimum number of fixation for a trial not to be discarded "
-            "(ignored when running baseline models)"
+            "(ignored unless model name is 'tda_experiment')"
         ),
     )
     parser.add_argument(
@@ -67,31 +95,13 @@ def parse_args():
     parser.add_argument(
         "--n-splits",
         type=int,
-        default=5,
-        help=(
-            "Number of splits to be used in nested CV (same number will be "
-            "used in inner and outer loop)"
-        ),
+        default=10,
+        help=("Number of splits to create for nested CV"),
     )
     parser.add_argument(
         "--with-n-fix",
         action="store_true",
         help="Append the length of a scanpath as an extra feature",
-    )
-    parser.add_argument(
-        "--balanced",
-        action="store_true",
-        help="Use balanced class weights in final SVC",
-    )
-    parser.add_argument(
-        "--truncate",
-        type=float,
-        default=1.0,
-        help=(
-            "Representative percentage of trials to consider (in terms of "
-            "length; applied after trials with fewer than --min-n-fixations "
-            "fixations)"
-        ),
     )
     parser.add_argument(
         "--n-iter",
@@ -134,51 +144,76 @@ def parse_args():
     return parser.parse_args()
 
 
-def validate_model_name(model_name: str) -> None:
-    """Validates the model name provided."""
-    if not model_name:
-        raise ValueError("No model name was provided.")
-    if model_name.startswith("tda_experiment"):
-        parts = args.model_name.split("_")
-        filtration_type, persistence_type = parts[-2:]
-        if not (
-            len(parts) == 4
-            and filtration_type
-            in constants.admissible_filtration_types_tda_experiment
-            and persistence_type
-            in constants.admissible_persistence_types_tda_experiment
+def validate_args(
+    args: argparse.Namespace,
+) -> None:
+    """Validates the arguments provided."""
+    if args.model_name == "tda_experiment":
+        if (
+            args.filtration_type
+            not in constants.admissible_filtration_types_tda_experiment
         ):
             raise ValueError(
-                "Invalid model name for TDA-experiment; model name must be of "
-                "the form 'tda_experiment_<horizontal|sloped|sigmoid|arctan>_"
-                f"<ordinary|extended>', but got {model_name} instead."
+                "Invalid filtration type for TDA-experiment; must be one of "
+                "'horizontal', 'sloped' and 'sigmoid', but got "
+                f"'{args.filtration_type}' instead."
             )
-    elif model_name.startswith("baseline_bjornsdottir"):
-        if model_name != "baseline_bjornsdottir":
-            raise ValueError(
-                "Invalid model name for Björnsdottir-baseline; model name "
-                f"must be 'baseline_bjornsdottir', but got {model_name} "
-                "instead."
-            )
-    elif model_name.startswith("baseline_raatikainen"):
-        parts = model_name.split("_")
-        model_kind = parts[-1]
-        if not (
-            len(parts) == 3
-            and model_kind in constants.admissible_model_kinds_raatikainen
+        if (
+            args.classifier
+            not in constants.admissible_classifiers_tda_experiment
         ):
             raise ValueError(
-                "Invalid model name for Raatikainen-baseline; model name must "
-                "be of the form 'baseline_raatikainen_<rf|svc>', but got "
-                f"{model_name} instead."
+                "Invalid classifier for TDA-experiment; must be one of 'svc' "
+                f"and 'rf', but got '{args.classifier}' instead."
+            )
+    elif args.model_name == "baseline_bjornsdottir":
+        if (
+            args.classifier
+            not in constants.admissible_classifiers_bjornsdottir
+        ):
+            raise ValueError(
+                "Invalid classifier for Björnsdottir-baseline; must be 'svc', "
+                f"but got '{args.classifier}' instead."
+            )
+    elif args.model_name == "baseline_raatikainen":
+        if args.classifier not in constants.admissible_classifiers_raatikainen:
+            raise ValueError(
+                "Invalid classifier for Raatikainen-baseline; must be one of "
+                f"'svc' and 'rf', but got '{args.classifier}' instead."
             )
     else:
         raise ValueError(
-            "Invalid model name; must be one of `'tda_experiment_"
-            "<horizontal|sloped|sigmoid|arctan>_<ordinary|extended>'`, "
-            "`'baseline_bjornsdottir'`, and `'baseline_raatikainen_"
-            f"<rf|svc>'`, but got {model_name} instead."
+            "Invalid model name; must be one of 'tda_experiment', "
+            "'baseline_bjornsdottir', and 'baseline_raatikainen', but got "
+            f"'{args.model_name}' instead."
         )
+    return
+
+
+def get_cv_results_file_path(
+    outdir: Path,
+    args: argparse.Namespace,
+) -> Path:
+    """Creates name of file storing results."""
+    if args.model_name == "tda_experiment":
+        persistence_type = (
+            "extended" if args.use_extended_persistence else "ordinary"
+        )
+        cv_results_file_path = outdir / (
+            f"cv_results_tda_experiment_{args.filtration_type}"
+            f"_{persistence_type}_{args.classifier}_seed_{args.seed}.json"
+        )
+    elif args.model_name == "baseline_bjornsdottir":
+        cv_results_file_path = outdir / (
+            f"cv_results_baseline_bjornsdottir_{args.classifier}"
+            f"_seed_{args.seed}.json"
+        )
+    elif args.model_name == "baseline_raatikainen":
+        cv_results_file_path = outdir / (
+            f"cv_results_baseline_raatikainen_{args.classifier}"
+            f"_seed_{args.seed}.json"
+        )
+    return cv_results_file_path
 
 
 def get_pipeline(
@@ -186,9 +221,6 @@ def get_pipeline(
     rng: np.random.Generator,
 ) -> Pipeline:
     if args.model_name.startswith("tda_experiment"):
-        parts = args.model_name.split("_")
-        filtration_type, persistence_type = parts[-2:]
-        use_extended_persistence = persistence_type == "extended"
         pipeline_topological_features = Pipeline(
             [
                 (
@@ -200,9 +232,9 @@ def get_pipeline(
                 (
                     "time_series_homology",
                     TimeSeriesHomology(
-                        filtration_type=filtration_type,
-                        use_extended_persistence=use_extended_persistence,
-                        drop_inf_persistence=not use_extended_persistence,
+                        filtration_type=args.filtration_type,
+                        use_extended_persistence=args.use_extended_persistence,
+                        drop_inf_persistence=not args.use_extended_persistence,
                     ),
                 ),
                 ("persistence_processor", PersistenceProcessor()),
@@ -222,8 +254,9 @@ def get_pipeline(
                     "pca",
                     PCA(
                         svd_solver="randomized",
-                        whiten=True,
-                        n_components=750 if use_extended_persistence else 250,
+                        n_components=750
+                        if args.use_extended_persistence
+                        else 250,
                         random_state=rng.integers(low=0, high=2**32),
                     ),
                 ),
@@ -255,20 +288,28 @@ def get_pipeline(
                 ("extra_features", pipeline_extra_features),
             ]
         )
+        if args.classifier == "svc":
+            clf = (
+                "svc",
+                SVC(
+                    probability=True,
+                    random_state=rng.integers(low=0, high=2**32),
+                ),
+            )
+        elif args.classifier == "rf":
+            clf = (
+                "rf",
+                RandomForestClassifier(
+                    random_state=rng.integers(low=0, high=2**32),  # FIXME
+                ),
+            )
         pipeline = Pipeline(
             [
                 (
                     "feature_union",
                     pipeline_union,
                 ),
-                (
-                    "svc",
-                    SVC(
-                        class_weight="balanced" if args.balanced else None,
-                        probability=True,
-                        random_state=rng.integers(low=0, high=2**32),
-                    ),
-                ),
+                clf,
             ]
         )
     elif args.model_name == "baseline_bjornsdottir":
@@ -289,42 +330,32 @@ def get_pipeline(
             ]
         )
     elif args.model_name.startswith("baseline_raatikainen"):
-        model_kind = args.model_name.split("_")[-1]
-        if model_kind == "rf":
-            pipeline = Pipeline(
-                [
-                    (
-                        "scaler",
-                        MinMaxScaler(
-                            feature_range=(-1, 1),
-                        ),
-                    ),
-                    (
-                        "rf",
-                        RandomForestClassifier(
-                            random_state=rng.integers(low=0, high=2**32),
-                        ),
-                    ),
-                ]
+        if args.classifier == "svc":
+            clf = (
+                "svc",
+                SVC(
+                    probability=True,
+                    random_state=rng.integers(low=0, high=2**32),
+                ),
             )
-        elif model_kind == "svc":
-            pipeline = Pipeline(
-                [
-                    (
-                        "scaler",
-                        MinMaxScaler(
-                            feature_range=(-1, 1),
-                        ),
-                    ),
-                    (
-                        "svc",
-                        SVC(
-                            probability=True,
-                            random_state=rng.integers(low=0, high=2**32),
-                        ),
-                    ),
-                ]
+        elif args.classifier == "rf":
+            clf = (
+                "rf",
+                RandomForestClassifier(
+                    random_state=rng.integers(low=0, high=2**32),
+                ),
             )
+        pipeline = Pipeline(
+            [
+                (
+                    "scaler",
+                    MinMaxScaler(
+                        feature_range=(-1, 1),
+                    ),
+                ),
+                clf,
+            ]
+        )
     return pipeline
 
 
@@ -360,72 +391,49 @@ def get_split_idxs(
 def main(
     args: argparse.Namespace,
 ) -> None:
-    validate_model_name(args.model_name)
+    validate_args(args)
     tqdm.write(f" RUNNING MODEL '{args.model_name}' ".center(120, "*"))
     rng = np.random.default_rng(seed=args.seed)
     outdir = "outfiles"
     if args.exclude_l2:
         outdir += "_without_l2"
-    if args.balanced:
-        outdir += "_balanced"
-    if args.truncate < 1.0:
-        outdir += f"_truncate_{args.truncate}"
     if args.with_n_fix:
         outdir += "_with_n_fix"
-    cv_results_file_path = Path(
-        f"./{outdir}/cv_results_{args.model_name}_seed_{args.seed}.json"
-    )
+    cv_results_file_path = get_cv_results_file_path(Path(outdir), args)
     if not cv_results_file_path.exists() or args.overwrite:
         # Get pipeline and corresponding hyperparameter distributions
-        if args.model_name.startswith("tda_experiment"):
-            model_class = "tda_experiment"
-            filtration_type = args.model_name.split("_")[-2]
+        if args.model_name == "tda_experiment":
             hyperparams = constants.hyperparams[
-                "_".join([model_class, filtration_type])
+                "_".join(
+                    [args.model_name, args.filtration_type, args.classifier]
+                )
             ]
             search_kind = "random"
             pipeline = get_pipeline(args, rng)
         elif args.model_name == "baseline_bjornsdottir":
-            model_class = "baseline_bjornsdottir"
-            hyperparams = constants.hyperparams[args.model_name]
+            hyperparams = constants.hyperparams[
+                "_".join([args.model_name, args.classifier])
+            ]
             search_kind = "grid"
             pipeline = get_pipeline(args, rng)
-        elif args.model_name.startswith("baseline_raatikainen"):
-            model_class = "baseline_raatikainen"
-            hyperparams = constants.hyperparams[args.model_name]
+        elif args.model_name == "baseline_raatikainen":
+            hyperparams = constants.hyperparams[
+                "_".join([args.model_name, args.classifier])
+            ]
             search_kind = "grid"
             pipeline = get_pipeline(args, rng)
         # Get dataframe with data
         df = get_dataframes.get_df(
-            model_class=model_class,
+            model_name=args.model_name,
             min_n_fixations=args.min_n_fixations,
             include_l2=not args.exclude_l2,
             verbose=bool(args.verbose),
             overwrite=args.overwrite,
         )
-        # Truncate data if required
-        if (
-            args.model_name.startswith("tda_experiment")
-            and args.truncate < 1.0
-        ):
-            df_with_len = df.with_columns(
-                pl.col("time_series").list.len().alias("length")
-            )
-            coverage = 100 * args.truncate
-            min_len, max_len = np.percentile(
-                df_with_len["length"],
-                [
-                    0.5 * (100 - coverage),
-                    coverage + 0.5 * (100 - coverage),
-                ],
-            ).astype(int)
-            df = df_with_len.filter(
-                pl.col("length").is_between(min_len, max_len)
-            ).drop("length")
         # Get array of samples, labels and reader IDs
         X, y, groups = get_data.get_X_y_groups(
             df=df,
-            model_class=model_class,
+            model_name=args.model_name,
         )
         # Get indices of splits
         split_idxs = get_split_idxs(
@@ -534,7 +542,7 @@ def main(
             json.dump(cv_results, f_out, indent=2)
         if args.verbose:
             tqdm.write(
-                f"Saved CV results for model `'{args.model_name}'`to "
+                f"Saved CV results for model '{args.model_name}' to "
                 f"`{cv_results_file_path}`."
             )
     else:
@@ -542,7 +550,7 @@ def main(
             cv_results = json.load(f_in)
         if args.verbose:
             tqdm.write(
-                f"Found CV results for model `'{args.model_name}'`at "
+                f"Found CV results for model '{args.model_name}' at "
                 f"`{cv_results_file_path}`; not overwriting."
             )
     # Print results

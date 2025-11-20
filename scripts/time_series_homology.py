@@ -176,10 +176,7 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
             ]
             for dgms_list in dgms_lists
         ]
-        if (
-            not self.use_extended_persistence
-            and self.drop_inf_persistence
-        ):
+        if not self.use_extended_persistence and self.drop_inf_persistence:
             dgms_formatted_lists = [
                 [
                     [
@@ -276,7 +273,7 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
         else:
             raise ValueError(
                 "Got invalid value for `filtration_type`, must be one of "
-                "`'horizontal'`, `'sloped'`, `'sigmoid'` and `'arctan'`."
+                "'horizontal', 'sloped', 'sigmoid' and 'arctan'."
             )
 
     def _format_dgm(
