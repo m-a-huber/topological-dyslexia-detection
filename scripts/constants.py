@@ -115,19 +115,31 @@ hyperparams_tda_common_rf = [
             1e-3, 1e-1
         ),
         "rf__n_estimators": randint(100, 2000),
+        "rf__max_depth": [
+            None,
+        ],
+        "rf__min_samples_split": randint(2, 50),
+        "rf__min_samples_leaf": randint(1, 50),
         "rf__max_features": [
             "sqrt",
             "log2",
             None,
-            uniform(0.05, 0.95),
         ],
+    },
+    {
+        "feature_union__topological_features__persistence_imager__base_estimator__bandwidth": loguniform(
+            1e-3, 1e-1
+        ),
+        "rf__n_estimators": randint(100, 2000),
         "rf__max_depth": [
-            None,
-            *list(randint(3, 50).rvs(12, random_state=42)),
+            randint(3, 50),
         ],
         "rf__min_samples_split": randint(2, 50),
         "rf__min_samples_leaf": randint(1, 50),
-    }
+        "rf__max_features": [
+            uniform(0.05, 0.95),
+        ],
+    },
 ]
 
 hyperparams_tda_slope = {

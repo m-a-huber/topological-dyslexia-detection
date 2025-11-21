@@ -410,13 +410,10 @@ def main(
             ]
             search_kind = "random"
             pipeline = get_pipeline(args, rng)
-        elif args.model_name == "baseline_bjornsdottir":
-            hyperparams = constants.hyperparams[
-                "_".join([args.model_name, args.classifier])
-            ]
-            search_kind = "grid"
-            pipeline = get_pipeline(args, rng)
-        elif args.model_name == "baseline_raatikainen":
+        elif args.model_name in [
+            "baseline_bjornsdottir",
+            "baseline_raatikainen",
+        ]:
             hyperparams = constants.hyperparams[
                 "_".join([args.model_name, args.classifier])
             ]
@@ -500,7 +497,7 @@ def main(
                     verbose=args.verbose,
                     random_state=rng.integers(low=0, high=2**32),
                 )
-            else:
+            elif search_kind == "grid":
                 inner_search = GridSearchCV(
                     estimator=pipeline,
                     param_grid=hyperparams,
