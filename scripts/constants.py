@@ -131,14 +131,10 @@ hyperparams_tda_common_rf = [
             1e-3, 1e-1
         ),
         "rf__n_estimators": randint(100, 2000),
-        "rf__max_depth": [
-            randint(3, 50),
-        ],
+        "rf__max_depth": randint(3, 50),
         "rf__min_samples_split": randint(2, 50),
         "rf__min_samples_leaf": randint(1, 50),
-        "rf__max_features": [
-            uniform(0.05, 0.95),
-        ],
+        "rf__max_features": uniform(0.05, 0.95),
     },
 ]
 
