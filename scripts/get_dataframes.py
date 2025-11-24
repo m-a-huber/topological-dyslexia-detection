@@ -141,24 +141,22 @@ def get_df(
                 df_all = df_all.filter(
                     pl.count("SAMPLE_ID").over("SAMPLE_ID") >= min_n_fixations
                 )
+            # Shift each time series to start at t=0
+            df_out = df_all.with_columns(
+                (
+                    pl.col("current_fix_start")
+                    - pl.col("current_fix_start").min().over("SAMPLE_ID")
+                ).alias("current_fix_start")
+            )
             # Combine x-, y- and t-coordinate of fixations into time series
             df_out = (
-                df_all.sort("current_fix_start")
+                df_out.sort("current_fix_start")
                 .group_by(["READER_ID", "LABEL", "TRIAL_ID", "SAMPLE_ID"])
                 .agg(
                     pl.concat_list(
                         ["current_fix_start", "current_fix_x", "current_fix_y"]
                     ).alias("time_series")
                 )
-            )
-            # Shift each time series to start at t=0
-            df_out = df_out.with_columns(
-                pl.col("time_series")
-                .map_elements(
-                    _shift_time_series,
-                    return_dtype=pl.List(pl.List(pl.Float64)),
-                )
-                .alias("time_series")
             )
             # Verify that number of rows is correct
             assert len(df_out) == df_all["SAMPLE_ID"].unique().len()
