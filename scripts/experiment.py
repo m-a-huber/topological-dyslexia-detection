@@ -493,7 +493,7 @@ def main(
                     cv=cv,
                     scoring="roc_auc",
                     n_jobs=args.n_jobs,
-                    refit=True,
+                    refit=False,
                     verbose=args.verbose,
                     random_state=rng.integers(low=0, high=2**32),
                 )
@@ -504,14 +504,33 @@ def main(
                     cv=cv,
                     scoring="roc_auc",
                     n_jobs=args.n_jobs,
-                    refit=True,
+                    refit=False,
                     verbose=args.verbose,
                 )
             # Optimize hyperparameters
             inner_search.fit(X, y)
-            # Evaluate best model on outer test fold
-            y_pred = inner_search.predict(X_test)
-            y_pred_proba = inner_search.predict_proba(X_test)[:, 1]
+            # Fit best model on non-test data
+            non_test_idxs = np.concatenate(
+                [
+                    non_test_idxs
+                    for non_test_fold_idx, non_test_idxs in enumerate(
+                        split_idxs
+                    )
+                    if non_test_fold_idx != test_fold_idx
+                ]
+            )
+            try:  # in case X is a NumPy-array
+                X_non_test = X[non_test_idxs]
+            except TypeError:  # fallback in case X is a list
+                X_non_test = [X[i] for i in non_test_idxs]
+            y_non_test = y[non_test_idxs]
+            best_params = inner_search.best_params_
+            best_estimator = pipeline.set_params(**best_params).fit(
+                X_non_test, y_non_test
+            )
+            # Get predictions from best model on test data
+            y_pred = best_estimator.predict(X_test)
+            y_pred_proba = best_estimator.predict_proba(X_test)[:, 1]
             # Get ROC AUC metrics
             fp_rate, tp_rate, thresholds_roc = roc_curve(y_test, y_pred_proba)
             cv_results["roc_curve"].append(
