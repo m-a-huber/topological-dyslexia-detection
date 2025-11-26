@@ -338,15 +338,3 @@ def _parse_fixation_report(
         new_columns=header,
     )
     return df
-
-
-def _is_sorted(lst):
-    # Helper to check if a list is sorted in strictly increasing manner
-    return all(lst[i] < lst[i + 1] for i in range(len(lst) - 1))
-
-
-def _shift_time_series(ts):
-    # Helper to shift time series to start at t=0
-    assert _is_sorted([t for t, _, _ in ts])
-    t_min = ts[0][0]
-    return [[t - t_min, x, y] for t, x, y in ts]
