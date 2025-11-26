@@ -1,10 +1,11 @@
 __pycache__/
-.vscode
 .venv
+.vscode
 data_*/
 dataframes*/
-outfiles*/
 logs*/
+notes/
+outfiles*/
 trash
 *.ipynb
 *.md
