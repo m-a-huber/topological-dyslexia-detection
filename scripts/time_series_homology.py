@@ -17,7 +17,7 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
             time series. Must be one of `"horizontal"`, `"sloped"`, `"sigmoid"`
             and `"arctan"`. Defaults to `"horizontal"`.
         slope (float, optional): Slope f'(0) of sweeping function f(t) used to
-            construct non-horizontal filtration. This is leads to the sweeping
+            construct non-horizontal filtration. This leads to the sweeping
             function being f(t):=slope*t+0.5, f(t):=1/(1+exp(-4*slope*t)) or
             f(t):=arctan(pi*slope*t)/pi+0.5 if `filtration_type` is set to
             `"sloped"`, `"sigmoid"` or `"arctan"`, respectively. Ignored unless
