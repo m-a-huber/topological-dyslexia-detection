@@ -58,8 +58,9 @@ def parse_args():
     parser.add_argument(
         "--filtration-type",
         help=(
-            "Filtration type to use (must be one of 'horizontal', 'sloped' "
-            "and 'sigmoid'; ignored unless model name is 'tda_experiment')"
+            "Filtration type to use (must be one of 'horizontal', 'sloped', "
+            "'sigmoid' and 'arctan'; ignored unless model name is "
+            "'tda_experiment')"
         ),
     )
     parser.add_argument(
@@ -148,23 +149,30 @@ def validate_args(
     args: argparse.Namespace,
 ) -> None:
     """Validates the arguments provided."""
+    if args.model_name not in constants.admissible_model_names:
+        raise ValueError(
+            f"Invalid model name; must be in "
+            f"{constants.admissible_model_names}, but got '{args.model_name}' "
+            "instead."
+        )
     if args.model_name == "tda_experiment":
         if (
             args.filtration_type
             not in constants.admissible_filtration_types_tda_experiment
         ):
             raise ValueError(
-                "Invalid filtration type for TDA-experiment; must be one of "
-                "'horizontal', 'sloped' and 'sigmoid', but got "
-                f"'{args.filtration_type}' instead."
+                "Invalid filtration type for TDA-experiment; must be in "
+                f"{constants.admissible_filtration_types_tda_experiment}, but "
+                f"got '{args.filtration_type}' instead."
             )
         if (
             args.classifier
             not in constants.admissible_classifiers_tda_experiment
         ):
             raise ValueError(
-                "Invalid classifier for TDA-experiment; must be one of 'svc' "
-                f"and 'rf', but got '{args.classifier}' instead."
+                "Invalid classifier for TDA-experiment; must be in "
+                f"{constants.admissible_classifiers_tda_experiment}, but got "
+                f"'{args.classifier}' instead."
             )
     elif args.model_name == "baseline_bjornsdottir":
         if (
@@ -172,21 +180,17 @@ def validate_args(
             not in constants.admissible_classifiers_bjornsdottir
         ):
             raise ValueError(
-                "Invalid classifier for Björnsdottir-baseline; must be 'svc', "
-                f"but got '{args.classifier}' instead."
+                "Invalid classifier for Björnsdottir-baseline; must be in "
+                f"{constants.admissible_classifiers_bjornsdottir}', but got "
+                f"'{args.classifier}' instead."
             )
     elif args.model_name == "baseline_raatikainen":
         if args.classifier not in constants.admissible_classifiers_raatikainen:
             raise ValueError(
-                "Invalid classifier for Raatikainen-baseline; must be one of "
-                f"'svc' and 'rf', but got '{args.classifier}' instead."
+                "Invalid classifier for Raatikainen-baseline; must be in "
+                f"{constants.admissible_classifiers_raatikainen}, but got "
+                f"'{args.classifier}' instead."
             )
-    else:
-        raise ValueError(
-            "Invalid model name; must be one of 'tda_experiment', "
-            "'baseline_bjornsdottir', and 'baseline_raatikainen', but got "
-            f"'{args.model_name}' instead."
-        )
     return
 
 

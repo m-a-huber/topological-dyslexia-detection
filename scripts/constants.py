@@ -69,10 +69,17 @@ subjects_non_dys_l2 = [
 
 # constants for validation of arguments
 
+admissible_model_names = [
+    "tda_experiment",
+    "baseline_bjornsdottir",
+    "baseline_raatikainen",
+]
+
 admissible_filtration_types_tda_experiment = [
     "horizontal",
     "sloped",
     "sigmoid",
+    "arctan",
 ]
 
 admissible_classifiers_tda_experiment = [
@@ -154,12 +161,20 @@ hyperparams = {
         hyperparams_tda_slope | hyperparam_dict
         for hyperparam_dict in hyperparams_tda_common_svc
     ],
+    "tda_experiment_arctan_svc": [
+        hyperparams_tda_slope | hyperparam_dict
+        for hyperparam_dict in hyperparams_tda_common_svc
+    ],
     "tda_experiment_horizontal_rf": hyperparams_tda_common_rf,
     "tda_experiment_sloped_rf": [
         hyperparams_tda_slope | hyperparam_dict
         for hyperparam_dict in hyperparams_tda_common_rf
     ],
     "tda_experiment_sigmoid_rf": [
+        hyperparams_tda_slope | hyperparam_dict
+        for hyperparam_dict in hyperparams_tda_common_rf
+    ],
+    "tda_experiment_arctan_rf": [
         hyperparams_tda_slope | hyperparam_dict
         for hyperparam_dict in hyperparams_tda_common_rf
     ],
