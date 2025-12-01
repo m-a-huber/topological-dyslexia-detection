@@ -396,14 +396,15 @@ def main(
     args: argparse.Namespace,
 ) -> None:
     validate_args(args)
-    tqdm.write(f" RUNNING MODEL '{args.model_name}' ".center(120, "*"))
     rng = np.random.default_rng(seed=args.seed)
     outdir = "outfiles"
+    cv_results_file_path = get_cv_results_file_path(Path(outdir), args)
+    experiment_name = cv_results_file_path.stem[11:]
+    tqdm.write(f" RUNNING MODEL '{experiment_name}' ".center(120, "*"))
     if args.exclude_l2:
         outdir += "_without_l2"
     if args.with_n_fix:
         outdir += "_with_n_fix"
-    cv_results_file_path = get_cv_results_file_path(Path(outdir), args)
     if not cv_results_file_path.exists() or args.overwrite:
         # Get pipeline and corresponding hyperparameter distributions
         if args.model_name == "tda_experiment":
