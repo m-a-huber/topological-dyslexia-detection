@@ -7,27 +7,25 @@ n_jobs = 8
 verbose = 1
 seed = 42
 
-common_flag = (
-    f"--n-splits {n_splits} --n-iter {n_iter} --n-jobs {n_jobs} --verbose {verbose} --seed {seed}"
-)
+common_flag = f"--n-splits {n_splits} --n-iter {n_iter} --n-jobs {n_jobs} --verbose {verbose} --seed {seed}"
 
-flag_sets = (
+flags_baselines = (
     f"--model-name baseline_bjornsdottir --classifier svc {common_flag}",
     f"--model-name baseline_raatikainen --classifier svc {common_flag}",
     f"--model-name baseline_raatikainen --classifier rf {common_flag}",
-    f"--model-name tda_experiment --filtration-type horizontal --classifier svc {common_flag}",
-    f"--model-name tda_experiment --filtration-type sloped --classifier svc {common_flag}",
-    f"--model-name tda_experiment --filtration-type sigmoid --classifier svc {common_flag}",
-    f"--model-name tda_experiment --filtration-type horizontal --classifier svc --use-extended-persistence {common_flag}",
-    f"--model-name tda_experiment --filtration-type sloped --classifier svc --use-extended-persistence {common_flag}",
-    f"--model-name tda_experiment --filtration-type sigmoid --classifier svc --use-extended-persistence {common_flag}",
-    # f"--model-name tda_experiment --filtration-type horizontal --classifier rf {common_flag}",
-    # f"--model-name tda_experiment --filtration-type sloped --classifier rf {common_flag}",
-    # f"--model-name tda_experiment --filtration-type sigmoid --classifier rf {common_flag}",
-    # f"--model-name tda_experiment --filtration-type horizontal --classifier rf --use-extended-persistence {common_flag}",
-    # f"--model-name tda_experiment --filtration-type sloped --classifier rf --use-extended-persistence {common_flag}",
-    # f"--model-name tda_experiment --filtration-type sigmoid --classifier rf --use-extended-persistence {common_flag}",
 )
 
-for flag_set in flag_sets:
+flags_tda_experiment_ordinary = tuple(
+    f"--model-name tda_experiment --filtration-type {filtration_type} --classifier {classifier} {common_flag}"
+    for classifier in ("svc", "rf")
+    for filtration_type in ("horizontal", "sloped", "sigmoid", "arctan")
+)
+
+flags_tda_experiment_extended = tuple(
+    f"--model-name tda_experiment --filtration-type {filtration_type} --classifier {classifier} --use-extended-persistence {common_flag}"
+    for classifier in ("svc", "rf")
+    for filtration_type in ("horizontal", "sloped", "sigmoid", "arctan")
+)
+
+for flag_set in flags_baselines + flags_tda_experiment_ordinary + flags_tda_experiment_extended:
     subprocess.run(f"uv run -m scripts.experiment {flag_set}", shell=True)
