@@ -23,7 +23,7 @@ class UniformSlope(rv_continuous):
         self.theta_min = np.arctan(min_slope)
         self.theta_max = np.arctan(max_slope)
 
-    def _rvs(self, size=None, random_state=None):
+    def _rvs(self, *args, size=None, random_state=None):  # noqa: ARG002
         rng = np.random.default_rng(random_state)
         theta = rng.uniform(self.theta_min, self.theta_max, size=size)
         return np.tan(theta)
@@ -39,7 +39,7 @@ class UniformSlopeSym(rv_continuous):
         self.theta_min = np.arctan(min_slope)
         self.theta_max = np.arctan(max_slope)
 
-    def _rvs(self, size=None, random_state=None):
+    def _rvs(self, *args, size=None, random_state=None):  # noqa: ARG002
         rng = np.random.default_rng(random_state)
         theta = rng.uniform(self.theta_min, self.theta_max, size=size)
         return rng.choice([-1, 1], size=size) * np.tan(theta)
