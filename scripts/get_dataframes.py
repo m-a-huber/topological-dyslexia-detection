@@ -16,15 +16,15 @@ def get_df(
     are `READER_ID`, `LABEL` and , possibly, `TRIAL_ID` and `SAMPLE_ID`
     (depending on the aggregation level of the corresponding model). The
     remaining columns contain the input data required for the corresponding
-    model. If `model_name` is set to `"tda_experiment"`, the `min_n_fixations`
+    model. If `model_name` is set to `"tsh"`, the `min_n_fixations`
     fixation sequences of length less than `min_n_fixations` will be discarded.
 
     Args:
         model_name (str): The class of the model. Must be one of
-            `'tda_experiment'`, `'baseline_bjornsdottir'` and
+            `'tsh'`, `'baseline_bjornsdottir'` and
             `'baseline_raatikainen'`.
         min_n_fixations (int): If greater than 1 and `model_name` is set to
-            `"tda_experiment"`, fixation sequences of length less than
+            `"tsh"`, fixation sequences of length less than
             `min_n_fixations` will be discarded. Ignored otherwise.
         include_l2 (bool): Whether or not to include data from CopCo-subjects
             whose native language is not Danish (all of these subjects are
@@ -47,7 +47,7 @@ def get_df(
     if include_l2:
         subjects += constants.subjects_non_dys_l2
     if not df_out_path.exists() or overwrite:
-        if model_name == "tda_experiment":
+        if model_name == "tsh":  # time series homology
             # Create df for all subjects
             subject_dfs = []
             for subject in subjects:

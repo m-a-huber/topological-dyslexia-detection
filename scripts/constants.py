@@ -70,19 +70,19 @@ subjects_non_dys_l2 = [
 # constants for validation of arguments
 
 admissible_model_names = [
-    "tda_experiment",
+    "tsh",  # time series homology
     "baseline_bjornsdottir",
     "baseline_raatikainen",
 ]
 
-admissible_filtration_types_tda_experiment = [
+admissible_filtration_types_tsh = [
     "horizontal",
     "sloped",
     "sigmoid",
     "arctan",
 ]
 
-admissible_classifiers_tda_experiment = [
+admissible_classifiers_tsh = [
     "svc",
     "rf",
 ]
@@ -152,29 +152,29 @@ hyperparams_tda_slope = {
 }
 
 hyperparams = {
-    "tda_experiment_horizontal_svc": hyperparams_tda_common_svc,
-    "tda_experiment_sloped_svc": [
+    "tsh_horizontal_svc": hyperparams_tda_common_svc,
+    "tsh_sloped_svc": [
         hyperparams_tda_slope | hyperparam_dict
         for hyperparam_dict in hyperparams_tda_common_svc
     ],
-    "tda_experiment_sigmoid_svc": [
+    "tsh_sigmoid_svc": [
         hyperparams_tda_slope | hyperparam_dict
         for hyperparam_dict in hyperparams_tda_common_svc
     ],
-    "tda_experiment_arctan_svc": [
+    "tsh_arctan_svc": [
         hyperparams_tda_slope | hyperparam_dict
         for hyperparam_dict in hyperparams_tda_common_svc
     ],
-    "tda_experiment_horizontal_rf": hyperparams_tda_common_rf,
-    "tda_experiment_sloped_rf": [
+    "tsh_horizontal_rf": hyperparams_tda_common_rf,
+    "tsh_sloped_rf": [
         hyperparams_tda_slope | hyperparam_dict
         for hyperparam_dict in hyperparams_tda_common_rf
     ],
-    "tda_experiment_sigmoid_rf": [
+    "tsh_sigmoid_rf": [
         hyperparams_tda_slope | hyperparam_dict
         for hyperparam_dict in hyperparams_tda_common_rf
     ],
-    "tda_experiment_arctan_rf": [
+    "tsh_arctan_rf": [
         hyperparams_tda_slope | hyperparam_dict
         for hyperparam_dict in hyperparams_tda_common_rf
     ],

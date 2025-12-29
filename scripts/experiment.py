@@ -51,7 +51,7 @@ def parse_args():
     parser.add_argument(
         "--model-name",
         help=(
-            "Name of model to run (must be one of 'tda_experiment', "
+            "Name of model to run (must be one of 'tsh', "
             "'baseline_bjornsdottir' and 'baseline_raatikainen')"
         ),
     )
@@ -60,7 +60,7 @@ def parse_args():
         help=(
             "Filtration type to use (must be one of 'horizontal', 'sloped', "
             "'sigmoid' and 'arctan'; ignored unless model name is "
-            "'tda_experiment')"
+            "'tsh')"
         ),
     )
     parser.add_argument(
@@ -69,7 +69,7 @@ def parse_args():
         help=(
             "Compute extended persistence of time series (as opposed to "
             "ordinary persistence; ignored unless model name is "
-            "'tda_experiment')"
+            "'tsh')"
         ),
     )
     parser.add_argument(
@@ -85,7 +85,7 @@ def parse_args():
         default=5,
         help=(
             "Minimum number of fixation for a trial not to be discarded "
-            "(ignored unless model name is 'tda_experiment')"
+            "(ignored unless model name is 'tsh')"
         ),
     )
     parser.add_argument(
@@ -155,23 +155,23 @@ def validate_args(
             f"{constants.admissible_model_names}, but got '{args.model_name}' "
             "instead."
         )
-    if args.model_name == "tda_experiment":
+    if args.model_name == "tsh":
         if (
             args.filtration_type
-            not in constants.admissible_filtration_types_tda_experiment
+            not in constants.admissible_filtration_types_tsh
         ):
             raise ValueError(
                 "Invalid filtration type for TDA-experiment; must be in "
-                f"{constants.admissible_filtration_types_tda_experiment}, but "
+                f"{constants.admissible_filtration_types_tsh}, but "
                 f"got '{args.filtration_type}' instead."
             )
         if (
             args.classifier
-            not in constants.admissible_classifiers_tda_experiment
+            not in constants.admissible_classifiers_tsh
         ):
             raise ValueError(
                 "Invalid classifier for TDA-experiment; must be in "
-                f"{constants.admissible_classifiers_tda_experiment}, but got "
+                f"{constants.admissible_classifiers_tsh}, but got "
                 f"'{args.classifier}' instead."
             )
     elif args.model_name == "baseline_bjornsdottir":
@@ -199,12 +199,12 @@ def get_cv_results_file_path(
     args: argparse.Namespace,
 ) -> Path:
     """Creates name of file storing results."""
-    if args.model_name == "tda_experiment":
+    if args.model_name == "tsh":
         persistence_type = (
             "extended" if args.use_extended_persistence else "ordinary"
         )
         cv_results_file_path = outdir / (
-            f"cv_results_tda_experiment_{args.filtration_type}"
+            f"cv_results_tsh_{args.filtration_type}"
             f"_{persistence_type}_{args.classifier}_seed_{args.seed}.json"
         )
     elif args.model_name == "baseline_bjornsdottir":
@@ -224,7 +224,7 @@ def get_pipeline(
     args: argparse.Namespace,
     rng: np.random.Generator,
 ) -> Pipeline:
-    if args.model_name.startswith("tda_experiment"):
+    if args.model_name.startswith("tsh"):
         pipeline_topological_features = Pipeline(
             [
                 (
@@ -407,7 +407,7 @@ def main(
     tqdm.write(f" RUNNING MODEL '{experiment_name}' ".center(120, "*"))
     if not cv_results_file_path.exists() or args.overwrite:
         # Get pipeline and corresponding hyperparameter distributions
-        if args.model_name == "tda_experiment":
+        if args.model_name == "tsh":
             hyperparams = constants.hyperparams[
                 "_".join(
                     [args.model_name, args.filtration_type, args.classifier]

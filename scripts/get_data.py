@@ -15,14 +15,14 @@ def get_X_y_groups(
         df (pl.DataFrame): Input dataframe, as created by
             `make_dataframes.get_df`.
         model_name (str): The class of the model. Must be one of
-            `'tda_experiment'`, `'baseline_bjornsdottir'` and
+            `'tsh'`, `'baseline_bjornsdottir'` and
             `'baseline_raatikainen'`.
 
     Returns:
         tuple[list[npt.NDArray] | npt.NDArray, npt.NDArray, npt.NDArray]:
             Tuple containing `X`, `y` and `groups`.
     """
-    if model_name == "tda_experiment":
+    if model_name == "tsh":  # time series homology
         X = [
             np.array(time_series, dtype=float)
             for time_series in df["time_series"].to_list()
