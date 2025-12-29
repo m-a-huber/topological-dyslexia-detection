@@ -88,7 +88,7 @@ admissible_classifiers_tsh = [
 ]
 
 admissible_classifiers_bjornsdottir = [
-    "svc",
+    "rf",
 ]
 
 admissible_classifiers_raatikainen = [
@@ -178,7 +178,7 @@ hyperparams = {
         hyperparams_tda_slope | hyperparam_dict
         for hyperparam_dict in hyperparams_tda_common_rf
     ],
-    "baseline_bjornsdottir_svc": {
+    "baseline_bjornsdottir_rf": {
         "rf__n_estimators": [
             1,
             10,

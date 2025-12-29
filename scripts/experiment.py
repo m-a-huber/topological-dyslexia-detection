@@ -5,6 +5,9 @@ from pathlib import Path
 import gudhi.representations as gdrep
 import numpy as np
 import numpy.typing as npt
+from imblearn.pipeline import Pipeline as ImbalancedPipeline
+from imblearn.under_sampling import RandomUnderSampler
+from sklearn.base import clone
 from sklearn.decomposition import PCA
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import (
@@ -19,7 +22,8 @@ from sklearn.model_selection import (
     RandomizedSearchCV,
     StratifiedGroupKFold,
 )
-from sklearn.pipeline import FeatureUnion, Pipeline
+from sklearn.pipeline import FeatureUnion
+from sklearn.pipeline import Pipeline as SklearnPipeline
 from sklearn.preprocessing import FunctionTransformer, MinMaxScaler
 from sklearn.svm import SVC
 from tqdm import tqdm
@@ -165,10 +169,7 @@ def validate_args(
                 f"{constants.admissible_filtration_types_tsh}, but "
                 f"got '{args.filtration_type}' instead."
             )
-        if (
-            args.classifier
-            not in constants.admissible_classifiers_tsh
-        ):
+        if args.classifier not in constants.admissible_classifiers_tsh:
             raise ValueError(
                 "Invalid classifier for TDA-experiment; must be in "
                 f"{constants.admissible_classifiers_tsh}, but got "
@@ -223,9 +224,9 @@ def get_cv_results_file_path(
 def get_pipeline(
     args: argparse.Namespace,
     rng: np.random.Generator,
-) -> Pipeline:
+) -> SklearnPipeline:
     if args.model_name.startswith("tsh"):
-        pipeline_topological_features = Pipeline(
+        pipeline_topological_features = SklearnPipeline(
             [
                 (
                     "time_series_scaler",
@@ -268,7 +269,7 @@ def get_pipeline(
         )
         if args.with_n_fix:
             # transformer that extracts length of each time series
-            pipeline_extra_features = Pipeline(
+            pipeline_extra_features = SklearnPipeline(
                 [
                     (
                         "get_lengths",
@@ -304,10 +305,10 @@ def get_pipeline(
             clf = (
                 "rf",
                 RandomForestClassifier(
-                    random_state=rng.integers(low=0, high=2**32),  # FIXME
+                    random_state=rng.integers(low=0, high=2**32),
                 ),
             )
-        pipeline = Pipeline(
+        pipeline = SklearnPipeline(
             [
                 (
                     "feature_union",
@@ -317,12 +318,18 @@ def get_pipeline(
             ]
         )
     elif args.model_name == "baseline_bjornsdottir":
-        pipeline = Pipeline(
+        pipeline = ImbalancedPipeline(
             [
                 (
                     "scaler",
                     MinMaxScaler(
                         feature_range=(-1, 1),
+                    ),
+                ),
+                (
+                    "downsampler",  # to balance classes to equal sizes
+                    RandomUnderSampler(
+                        random_state=rng.integers(low=0, high=2**32)
                     ),
                 ),
                 (
@@ -349,7 +356,7 @@ def get_pipeline(
                     random_state=rng.integers(low=0, high=2**32),
                 ),
             )
-        pipeline = Pipeline(
+        pipeline = SklearnPipeline(
             [
                 (
                     "scaler",
@@ -530,7 +537,7 @@ def main(
                 X_non_test = [X[i] for i in non_test_idxs]
             y_non_test = y[non_test_idxs]
             best_params = inner_search.best_params_
-            best_estimator = pipeline.set_params(**best_params).fit(
+            best_estimator = clone(pipeline).set_params(**best_params).fit(
                 X_non_test, y_non_test
             )
             # Get predictions from best model on test data

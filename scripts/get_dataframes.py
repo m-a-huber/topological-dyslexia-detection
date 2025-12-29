@@ -193,23 +193,6 @@ def get_df(
                     separator="-",
                 ).alias("SAMPLE_ID")
             )
-            # Downsample dyslexic subjects
-            df_non_dys = df_all.filter(pl.col("LABEL") == 0)
-            df_dys = df_all.filter(pl.col("LABEL") == 1)
-            max_number_of_samples = len(df_dys["SAMPLE_ID"].unique())
-            df_non_dys_grouped = df_non_dys.group_by(
-                "SAMPLE_ID", maintain_order=True
-            )
-            df_non_dys_downsampled = pl.concat(
-                [
-                    df
-                    for _, df in list(df_non_dys_grouped)[
-                        :max_number_of_samples
-                    ]
-                ]
-            )
-            # Combine dataframes
-            df_all = pl.concat([df_non_dys_downsampled, df_dys])
             df_all = df_all.drop(
                 "word",
                 "char_IA_ids",
