@@ -22,9 +22,8 @@ from sklearn.model_selection import (
     RandomizedSearchCV,
     StratifiedGroupKFold,
 )
-from sklearn.pipeline import FeatureUnion
-from sklearn.pipeline import Pipeline as SklearnPipeline
-from sklearn.preprocessing import FunctionTransformer, MinMaxScaler
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import MinMaxScaler
 from sklearn.svm import SVC
 from tqdm import tqdm
 
@@ -50,17 +49,30 @@ def parse_args():
             )
 
     parser = argparse.ArgumentParser(
-        description="Run TDA-experiment or baselines on CopCo"
+        description="Run TDA-experiment or baselines on CopCo",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
         "--model-name",
+        type=str,
+        required=True,
+        choices=constants.admissible_model_names,
         help=(
             "Name of model to run (must be one of 'tsh', "
             "'baseline_bjornsdottir' and 'baseline_raatikainen')"
         ),
     )
     parser.add_argument(
+        "--classifier",
+        type=str,
+        help=(
+            "Classifier to use (must be one of 'svc' and 'rf', depending on "
+            "the model name)"
+        ),
+    )
+    parser.add_argument(
         "--filtration-type",
+        type=str,
         help=(
             "Filtration type to use (must be one of 'horizontal', 'sloped', "
             "'sigmoid' and 'arctan'; ignored unless model name is "
@@ -77,11 +89,9 @@ def parse_args():
         ),
     )
     parser.add_argument(
-        "--classifier",
-        help=(
-            "Classifier to use (must be one of 'svc' and 'rf', depending on "
-            "the model name)"
-        ),
+        "--exclude-l2",
+        action="store_true",
+        help="Exclude CopCo-L2-readers",
     )
     parser.add_argument(
         "--min-n-fixations",
@@ -93,20 +103,10 @@ def parse_args():
         ),
     )
     parser.add_argument(
-        "--exclude-l2",
-        action="store_true",
-        help="Exclude CopCo-L2-readers",
-    )
-    parser.add_argument(
         "--n-splits",
         type=int,
         default=10,
         help=("Number of splits to create for nested CV"),
-    )
-    parser.add_argument(
-        "--with-n-fix",
-        action="store_true",
-        help="Append the length of a scanpath as an extra feature",
     )
     parser.add_argument(
         "--n-iter",
@@ -153,12 +153,6 @@ def validate_args(
     args: argparse.Namespace,
 ) -> None:
     """Validates the arguments provided."""
-    if args.model_name not in constants.admissible_model_names:
-        raise ValueError(
-            f"Invalid model name; must be in "
-            f"{constants.admissible_model_names}, but got '{args.model_name}' "
-            "instead."
-        )
     if args.model_name == "tsh":
         if (
             args.filtration_type
@@ -182,7 +176,7 @@ def validate_args(
         ):
             raise ValueError(
                 "Invalid classifier for Björnsdottir-baseline; must be in "
-                f"{constants.admissible_classifiers_bjornsdottir}', but got "
+                f"{constants.admissible_classifiers_bjornsdottir}, but got "
                 f"'{args.classifier}' instead."
             )
     elif args.model_name == "baseline_raatikainen":
@@ -224,9 +218,24 @@ def get_cv_results_file_path(
 def get_pipeline(
     args: argparse.Namespace,
     rng: np.random.Generator,
-) -> SklearnPipeline:
+) -> Pipeline:
+    if args.classifier == "svc":
+        clf = (
+            "svc",
+            SVC(
+                probability=True,
+                random_state=rng.integers(low=0, high=2**32),
+            ),
+        )
+    elif args.classifier == "rf":
+        clf = (
+            "rf",
+            RandomForestClassifier(
+                random_state=rng.integers(low=0, high=2**32),
+            ),
+        )
     if args.model_name == "tsh":
-        pipeline_topological_features = SklearnPipeline(
+        pipeline = Pipeline(
             [
                 (
                     "time_series_scaler",
@@ -265,55 +274,6 @@ def get_pipeline(
                         random_state=rng.integers(low=0, high=2**32),
                     ),
                 ),
-            ]
-        )
-        if args.with_n_fix:
-            # transformer that extracts length of each time series
-            pipeline_extra_features = SklearnPipeline(
-                [
-                    (
-                        "get_lengths",
-                        FunctionTransformer(
-                            lambda X: np.array(
-                                [len(x) for x in X], dtype=float
-                            ).reshape(-1, 1)
-                        ),
-                    ),
-                    ("scale_lengths", MinMaxScaler(feature_range=(0, 1))),
-                ]
-            )
-        else:
-            # dummy transformer that does nothing
-            pipeline_extra_features = FunctionTransformer(
-                lambda X: np.empty(shape=(len(X), 0), dtype=float)
-            )
-        pipeline_union = FeatureUnion(
-            [
-                ("topological_features", pipeline_topological_features),
-                ("extra_features", pipeline_extra_features),
-            ]
-        )
-        if args.classifier == "svc":
-            clf = (
-                "svc",
-                SVC(
-                    probability=True,
-                    random_state=rng.integers(low=0, high=2**32),
-                ),
-            )
-        elif args.classifier == "rf":
-            clf = (
-                "rf",
-                RandomForestClassifier(
-                    random_state=rng.integers(low=0, high=2**32),
-                ),
-            )
-        pipeline = SklearnPipeline(
-            [
-                (
-                    "feature_union",
-                    pipeline_union,
-                ),
                 clf,
             ]
         )
@@ -332,31 +292,11 @@ def get_pipeline(
                         random_state=rng.integers(low=0, high=2**32)
                     ),
                 ),
-                (
-                    "rf",
-                    RandomForestClassifier(
-                        random_state=rng.integers(low=0, high=2**32),
-                    ),
-                ),
+                clf,
             ]
         )
     elif args.model_name == "baseline_raatikainen":
-        if args.classifier == "svc":
-            clf = (
-                "svc",
-                SVC(
-                    probability=True,
-                    random_state=rng.integers(low=0, high=2**32),
-                ),
-            )
-        elif args.classifier == "rf":
-            clf = (
-                "rf",
-                RandomForestClassifier(
-                    random_state=rng.integers(low=0, high=2**32),
-                ),
-            )
-        pipeline = SklearnPipeline(
+        pipeline = Pipeline(
             [
                 (
                     "scaler",
@@ -375,13 +315,14 @@ def get_split_idxs(
     y: npt.NDArray,
     groups: npt.NDArray,
     n_splits: int,
+    verbose: bool,
     rng: np.random.Generator,
 ) -> list[npt.NDArray]:
     split_idxs_ok = False
     while not split_idxs_ok:
-        if args.verbose:
+        if verbose:
             tqdm.write(
-                f"Finding splitting of data into {args.n_splits} splits..."
+                f"Finding splitting of data into {n_splits} splits..."
             )
         splitter = StratifiedGroupKFold(
             n_splits=n_splits,
@@ -394,21 +335,18 @@ def get_split_idxs(
         )
         if (n_classes_per_split > 1).all():
             split_idxs_ok = True
-    if args.verbose:
-        tqdm.write(f"Found splitting of data into {args.n_splits} splits.")
+    if verbose:
+        tqdm.write(f"Found splitting of data into {n_splits} splits.")
     return split_idxs
 
 
-def main(
-    args: argparse.Namespace,
-) -> None:
+def main() -> None:
+    args = parse_args()
     validate_args(args)
     rng = np.random.default_rng(seed=args.seed)
     outdir = "outfiles"
     if args.exclude_l2:
         outdir += "_without_l2"
-    if args.with_n_fix:
-        outdir += "_with_n_fix"
     cv_results_file_path = get_cv_results_file_path(Path(outdir), args)
     experiment_name = cv_results_file_path.stem[11:]
     tqdm.write(f" RUNNING MODEL '{experiment_name}' ".center(120, "*"))
@@ -450,6 +388,7 @@ def main(
             y=y,
             groups=groups,
             n_splits=args.n_splits,
+            verbose=args.verbose,
             rng=rng,
         )
         # Verify that no reader ID appears in more than one split
@@ -595,5 +534,4 @@ def main(
 
 
 if __name__ == "__main__":
-    args = parse_args()
-    raise SystemExit(main(args))
+    raise SystemExit(main())

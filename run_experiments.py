@@ -18,7 +18,7 @@ seed = 42
 common_flag = f"--n-splits {n_splits} --n-iter {n_iter} --n-jobs {n_jobs} --verbose {verbose} --seed {seed}"
 
 flags_baselines = (
-    f"--model-name baseline_bjornsdottir --classifier svc {common_flag}",
+    f"--model-name baseline_bjornsdottir --classifier rf {common_flag}",
     f"--model-name baseline_raatikainen --classifier svc {common_flag}",
     f"--model-name baseline_raatikainen --classifier rf {common_flag}",
 )
