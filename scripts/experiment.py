@@ -225,7 +225,7 @@ def get_pipeline(
     args: argparse.Namespace,
     rng: np.random.Generator,
 ) -> SklearnPipeline:
-    if args.model_name.startswith("tsh"):
+    if args.model_name == "tsh":
         pipeline_topological_features = SklearnPipeline(
             [
                 (
@@ -340,7 +340,7 @@ def get_pipeline(
                 ),
             ]
         )
-    elif args.model_name.startswith("baseline_raatikainen"):
+    elif args.model_name == "baseline_raatikainen":
         if args.classifier == "svc":
             clf = (
                 "svc",
