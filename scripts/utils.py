@@ -16,7 +16,8 @@ def weight_abs1p(pt):
 
 class UniformSlope(rv_continuous):
     """Helper class to sample slopes of lines through the origin such that they
-    are uniform with respect to angle of the sectors [min_slope, max_slope]."""
+    are uniform with respect to angle of the sectors [min_slope, max_slope].
+    """
 
     def __init__(self, min_slope, max_slope, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -32,7 +33,8 @@ class UniformSlope(rv_continuous):
 class UniformSlopeSym(rv_continuous):
     """Helper class to sample slopes of lines through the origin such that they
     are uniform with respect to angle of the two sectors [min_slope, max_slope]
-    and [-max_slope, -min_slope]."""
+    and [-max_slope, -min_slope].
+    """
 
     def __init__(self, min_slope, max_slope, *args, **kwargs):
         super().__init__(*args, **kwargs)
