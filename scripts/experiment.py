@@ -57,10 +57,7 @@ def parse_args():
         type=str,
         required=True,
         choices=constants.admissible_model_names,
-        help=(
-            "Name of model to run (must be one of 'tsh', "
-            "'baseline_bjornsdottir' and 'baseline_raatikainen')"
-        ),
+        help=("Name of model to run"),
     )
     parser.add_argument(
         "--classifier",
@@ -199,17 +196,12 @@ def get_cv_results_file_path(
             "extended" if args.use_extended_persistence else "ordinary"
         )
         cv_results_file_path = outdir / (
-            f"cv_results_tsh_{args.filtration_type}"
+            f"cv_results_{args.model_name}_{args.filtration_type}"
             f"_{persistence_type}_{args.classifier}_seed_{args.seed}.json"
         )
-    elif args.model_name == "baseline_bjornsdottir":
+    elif args.model_name in ["baseline_bjornsdottir", "baseline_raatikainen"]:
         cv_results_file_path = outdir / (
-            f"cv_results_baseline_bjornsdottir_{args.classifier}"
-            f"_seed_{args.seed}.json"
-        )
-    elif args.model_name == "baseline_raatikainen":
-        cv_results_file_path = outdir / (
-            f"cv_results_baseline_raatikainen_{args.classifier}"
+            f"cv_results_{args.model_name}_{args.classifier}"
             f"_seed_{args.seed}.json"
         )
     return cv_results_file_path
@@ -321,9 +313,7 @@ def get_split_idxs(
     split_idxs_ok = False
     while not split_idxs_ok:
         if verbose:
-            tqdm.write(
-                f"Finding splitting of data into {n_splits} splits..."
-            )
+            tqdm.write(f"Finding splitting of data into {n_splits} splits...")
         splitter = StratifiedGroupKFold(
             n_splits=n_splits,
             shuffle=True,
@@ -476,8 +466,10 @@ def main() -> None:
                 X_non_test = [X[i] for i in non_test_idxs]
             y_non_test = y[non_test_idxs]
             best_params = inner_search.best_params_
-            best_estimator = clone(pipeline).set_params(**best_params).fit(
-                X_non_test, y_non_test
+            best_estimator = (
+                clone(pipeline)
+                .set_params(**best_params)
+                .fit(X_non_test, y_non_test)
             )
             # Get predictions from best model on test data
             y_pred = best_estimator.predict(X_test)
