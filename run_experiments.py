@@ -35,5 +35,26 @@ flags_tsh_extended = tuple(
     for filtration_type in ("horizontal", "sloped", "sigmoid", "arctan")
 )
 
-for flag_set in flags_baselines + flags_tsh_ordinary + flags_tsh_extended:
-    subprocess.run(f"uv run -m scripts.experiment {flag_set} {'--exclude-l2' if args.exclude_l2 else ''}", shell=True)
+flags_tsh_aggregated_ordinary = tuple(
+    f"--model-name tsh_aggregated --filtration-type {filtration_type} --classifier {classifier} {common_flag}"
+    for classifier in ("svc", "rf")
+    for filtration_type in ("horizontal", "sloped", "sigmoid", "arctan")
+)
+
+flags_tsh_aggregated_extended = tuple(
+    f"--model-name tsh_aggregated --filtration-type {filtration_type} --classifier {classifier} --use-extended-persistence {common_flag}"
+    for classifier in ("svc", "rf")
+    for filtration_type in ("horizontal", "sloped", "sigmoid", "arctan")
+)
+
+for flag_set in (
+    flags_baselines
+    + flags_tsh_ordinary
+    + flags_tsh_extended
+    + flags_tsh_aggregated_ordinary
+    + flags_tsh_aggregated_extended
+):
+    subprocess.run(
+        f"uv run -m scripts.experiment {flag_set}{' --exclude-l2' if args.exclude_l2 else ''}",
+        shell=True,
+    )

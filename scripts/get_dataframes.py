@@ -47,7 +47,7 @@ def get_df(
     if include_l2:
         subjects += constants.subjects_non_dys_l2
     if not df_out_path.exists() or overwrite:
-        if model_name == "tsh":  # time series homology
+        if model_name in ["tsh", "tsh_aggregated"]:  # time series homology
             # Create df for all subjects
             subject_dfs = []
             for subject in subjects:

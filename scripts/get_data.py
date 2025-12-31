@@ -22,7 +22,7 @@ def get_X_y_groups(
         tuple[list[npt.NDArray] | npt.NDArray, npt.NDArray, npt.NDArray]:
             Tuple containing `X`, `y` and `groups`.
     """
-    if model_name == "tsh":  # time series homology
+    if model_name in ["tsh", "tsh_aggregated"]:  # time series homology
         X = [
             np.array(time_series, dtype=float)
             for time_series in df["time_series"].to_list()

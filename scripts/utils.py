@@ -14,6 +14,15 @@ def weight_abs1p(pt):
     return np.abs(pt[1]) + 1
 
 
+def group_by_mean(X, groups):
+    """Groups the rows of X according to the corresponding group in groups and
+    returns the mean of each group as rows in a 2D array.
+    """
+    return np.array(
+        [X[groups == group].mean(axis=0) for group in np.unique(groups)]
+    )
+
+
 class UniformSlope(rv_continuous):
     """Helper class to sample slopes of lines through the origin such that they
     are uniform with respect to angle of the sectors [min_slope, max_slope].

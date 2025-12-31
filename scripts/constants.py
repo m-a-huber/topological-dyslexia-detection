@@ -71,6 +71,7 @@ subjects_non_dys_l2 = [
 
 admissible_model_names = [
     "tsh",  # time series homology
+    "tsh_aggregated",
     "baseline_bjornsdottir",
     "baseline_raatikainen",
 ]
@@ -100,7 +101,7 @@ admissible_classifiers_raatikainen = [
 
 hyperparams_tda_common_svc = [
     {
-        "feature_union__topological_features__persistence_imager__base_estimator__bandwidth": loguniform(
+        "persistence_imager__base_estimator__bandwidth": loguniform(
             1e-3, 1e-1
         ),
         "svc__kernel": ["rbf"],
@@ -108,7 +109,7 @@ hyperparams_tda_common_svc = [
         "svc__gamma": loguniform(1e-4, 1e-2),
     },
     {
-        "feature_union__topological_features__persistence_imager__base_estimator__bandwidth": loguniform(
+        "persistence_imager__base_estimator__bandwidth": loguniform(
             1e-3, 1e-1
         ),
         "svc__kernel": ["linear"],
@@ -118,7 +119,7 @@ hyperparams_tda_common_svc = [
 
 hyperparams_tda_common_rf = [
     {
-        "feature_union__topological_features__persistence_imager__base_estimator__bandwidth": loguniform(
+        "persistence_imager__base_estimator__bandwidth": loguniform(
             1e-3, 1e-1
         ),
         "rf__n_estimators": randint(100, 2000),
@@ -134,7 +135,7 @@ hyperparams_tda_common_rf = [
         ],
     },
     {
-        "feature_union__topological_features__persistence_imager__base_estimator__bandwidth": loguniform(
+        "persistence_imager__base_estimator__bandwidth": loguniform(
             1e-3, 1e-1
         ),
         "rf__n_estimators": randint(100, 2000),
@@ -146,7 +147,7 @@ hyperparams_tda_common_rf = [
 ]
 
 hyperparams_tda_slope = {
-    "feature_union__topological_features__time_series_homology__slope": UniformSlopeSym(
+    "time_series_homology__slope": UniformSlopeSym(
         min_slope=0.5, max_slope=4
     ),
 }
@@ -175,6 +176,32 @@ hyperparams = {
         for hyperparam_dict in hyperparams_tda_common_rf
     ],
     "tsh_arctan_rf": [
+        hyperparams_tda_slope | hyperparam_dict
+        for hyperparam_dict in hyperparams_tda_common_rf
+    ],
+    "tsh_aggregated_horizontal_svc": hyperparams_tda_common_svc,
+    "tsh_aggregated_sloped_svc": [
+        hyperparams_tda_slope | hyperparam_dict
+        for hyperparam_dict in hyperparams_tda_common_svc
+    ],
+    "tsh_aggregated_sigmoid_svc": [
+        hyperparams_tda_slope | hyperparam_dict
+        for hyperparam_dict in hyperparams_tda_common_svc
+    ],
+    "tsh_aggregated_arctan_svc": [
+        hyperparams_tda_slope | hyperparam_dict
+        for hyperparam_dict in hyperparams_tda_common_svc
+    ],
+    "tsh_aggregated_horizontal_rf": hyperparams_tda_common_rf,
+    "tsh_aggregated_sloped_rf": [
+        hyperparams_tda_slope | hyperparam_dict
+        for hyperparam_dict in hyperparams_tda_common_rf
+    ],
+    "tsh_aggregated_sigmoid_rf": [
+        hyperparams_tda_slope | hyperparam_dict
+        for hyperparam_dict in hyperparams_tda_common_rf
+    ],
+    "tsh_aggregated_arctan_rf": [
         hyperparams_tda_slope | hyperparam_dict
         for hyperparam_dict in hyperparams_tda_common_rf
     ],
