@@ -160,6 +160,10 @@ def get_df(
             )
             # Verify that number of rows is correct
             assert len(df_out) == df_all["SAMPLE_ID"].unique().len()
+            if model_name == "tsh_aggregated":  # aggregate over readers
+                df_out = df_out.group_by("READER_ID", "LABEL").agg(
+                    pl.col("time_series").alias("time_series_list")
+                )
         elif model_name == "baseline_bjornsdottir":
             # Create df for all subjects
             subject_dfs = []

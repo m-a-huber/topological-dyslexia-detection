@@ -59,22 +59,44 @@ class UniformSlopeSym(rv_continuous):
 class ListTransformer(BaseEstimator, TransformerMixin):
     """Helper class that, given a sklearn-estimator that can be applied to a
     list of points, creates a version of that estimator that can be applied to
-    a list of lists of points.
+    a list of lists of points. The estimator is applied to the flattened list
+    of points or to each list of points separately, depending on whether
+    `concatenate` is set to `True` or `False`, respectively.
     """
 
-    def __init__(self, base_estimator):
+    def __init__(self, base_estimator, concatenate):
         self.base_estimator = base_estimator
+        self.concatenate = concatenate
 
-    def fit(self, X, y=None):
-        X_concat = [el for list in X for el in list]
-        self.estimator_ = clone(self.base_estimator).fit(X_concat, y)
+    def fit(self, X, y=None):  # noqa: ARG002
+        if self.concatenate:
+            try:
+                X_concat = np.array([el for x in X for el in x])
+            except ValueError:
+                X_concat = [el for x in X for el in x]
+            self.estimator_ = clone(self.base_estimator).fit(X_concat, None)
+        else:
+            self.estimators_ = [
+                clone(self.base_estimator).fit(x, None) for x in X
+            ]
         return self
 
     def transform(self, X):
-        try:
-            return np.array([self.estimator_.transform(arr) for arr in X])
-        except ValueError:
-            return [self.estimator_.transform(arr) for arr in X]
+        if self.concatenate:
+            out = [self.estimator_.transform(arr) for arr in X]
+            try:
+                return np.array(out)
+            except ValueError:
+                return out
+        else:
+            out = [
+                estimator.transform(x)
+                for estimator, x in zip(self.estimators_, X)
+            ]
+            try:
+                return np.array(out)
+            except ValueError:
+                return out
 
 
 class PersistenceProcessor(BaseEstimator, TransformerMixin):
@@ -128,3 +150,19 @@ class PersistenceImageProcessor(BaseEstimator, TransformerMixin):
             + self.feature_range[0]
         )
         return X_scaled.reshape(len(X), -1)
+
+
+class MeanAggregator(BaseEstimator, TransformerMixin):
+    """Helper class that aggregates elements of an array by replacing them with
+    their mean.
+    """
+
+    def __init__(self):
+        pass
+
+    def fit(self, X, y=None):  # noqa: ARG002
+        self._is_fitted_ = True
+        return self
+
+    def transform(self, X):
+        return np.array([X.mean(axis=0) for X in X])

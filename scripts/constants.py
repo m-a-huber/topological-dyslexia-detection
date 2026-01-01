@@ -97,128 +97,122 @@ admissible_classifiers_raatikainen = [
     "rf",
 ]
 
-# hyperparameter distributions for tuning
+# Helper functions to generate hyperparameter distributions
 
-hyperparams_tda_common_svc = [
-    {
-        "persistence_imager__base_estimator__bandwidth": loguniform(
-            1e-3, 1e-1
-        ),
-        "svc__kernel": ["rbf"],
-        "svc__C": loguniform(1e-1, 1e2),
-        "svc__gamma": loguniform(1e-4, 1e-2),
-    },
-    {
-        "persistence_imager__base_estimator__bandwidth": loguniform(
-            1e-3, 1e-1
-        ),
-        "svc__kernel": ["linear"],
-        "svc__C": loguniform(1e-2, 1e1),
-    },
-]
 
-hyperparams_tda_common_rf = [
-    {
-        "persistence_imager__base_estimator__bandwidth": loguniform(
-            1e-3, 1e-1
-        ),
-        "rf__n_estimators": randint(100, 2000),
-        "rf__max_depth": [
-            None,
-        ],
-        "rf__min_samples_split": randint(2, 50),
-        "rf__min_samples_leaf": randint(1, 50),
-        "rf__max_features": [
-            "sqrt",
-            "log2",
-            None,
-        ],
-    },
-    {
-        "persistence_imager__base_estimator__bandwidth": loguniform(
-            1e-3, 1e-1
-        ),
-        "rf__n_estimators": randint(100, 2000),
-        "rf__max_depth": randint(3, 50),
-        "rf__min_samples_split": randint(2, 50),
-        "rf__min_samples_leaf": randint(1, 50),
-        "rf__max_features": uniform(0.05, 0.95),
-    },
-]
+def _get_common_svc_hyperparams(bandwidth_param: str) -> list[dict]:
+    """Generate common SVC hyperparameters for TSH models."""
+    return [
+        {
+            bandwidth_param: loguniform(1e-3, 1e-1),
+            "svc__kernel": ["rbf"],
+            "svc__C": loguniform(1e-1, 1e2),
+            "svc__gamma": loguniform(1e-4, 1e-2),
+        },
+        {
+            bandwidth_param: loguniform(1e-3, 1e-1),
+            "svc__kernel": ["linear"],
+            "svc__C": loguniform(1e-2, 1e1),
+        },
+    ]
 
-hyperparams_tda_slope = {
-    "time_series_homology__slope": UniformSlopeSym(
-        min_slope=0.5, max_slope=4
-    ),
-}
+
+def _get_common_rf_hyperparams(bandwidth_param: str) -> list[dict]:
+    """Generate common RF hyperparameters for TSH models."""
+    return [
+        {
+            bandwidth_param: loguniform(1e-3, 1e-1),
+            "rf__n_estimators": randint(100, 2000),
+            "rf__max_depth": [None],
+            "rf__min_samples_split": randint(2, 50),
+            "rf__min_samples_leaf": randint(1, 50),
+            "rf__max_features": ["sqrt", "log2", None],
+        },
+        {
+            bandwidth_param: loguniform(1e-3, 1e-1),
+            "rf__n_estimators": randint(100, 2000),
+            "rf__max_depth": randint(3, 50),
+            "rf__min_samples_split": randint(2, 50),
+            "rf__min_samples_leaf": randint(1, 50),
+            "rf__max_features": uniform(0.05, 0.95),
+        },
+    ]
+
+
+def _get_slope_hyperparams(slope_param: str) -> dict:
+    """Generate slope hyperparameters for TSH models."""
+    return {
+        slope_param: UniformSlopeSym(min_slope=0.5, max_slope=4),
+    }
+
+
+# hyperparameter distributions for tsh
+
+hyperparams_tsh_common_svc = _get_common_svc_hyperparams(
+    "persistence_imager__base_estimator__bandwidth"
+)
+hyperparams_tsh_common_rf = _get_common_rf_hyperparams(
+    "persistence_imager__base_estimator__bandwidth"
+)
+hyperparams_tsh_slope = _get_slope_hyperparams("time_series_homology__slope")
+
+# hyperparameter distributions for tsh_aggregated
+
+hyperparams_tsh_aggregated_common_svc = _get_common_svc_hyperparams(
+    "persistence_imager__base_estimator__base_estimator__bandwidth"
+)
+hyperparams_tsh_aggregated_common_rf = _get_common_rf_hyperparams(
+    "persistence_imager__base_estimator__base_estimator__bandwidth"
+)
+hyperparams_tsh_aggregated_slope = _get_slope_hyperparams(
+    "time_series_homology__base_estimator__slope"
+)
+
+# hyperparameter distributions for all models
+
+
+# Helper function to build TSH hyperparams
+def _build_tsh_hyperparams(
+    model_prefix: str,
+    common_svc: list[dict],
+    common_rf: list[dict],
+    slope: dict,
+) -> dict:
+    """Build hyperparameter dictionary for TSH models."""
+    filtration_types_with_slope = ["sloped", "sigmoid", "arctan"]
+    result = {}
+
+    for filtration_type in ["horizontal", *filtration_types_with_slope]:
+        for classifier in ["svc", "rf"]:
+            key = f"{model_prefix}_{filtration_type}_{classifier}"
+            common = common_svc if classifier == "svc" else common_rf
+
+            if filtration_type == "horizontal":
+                result[key] = common
+            else:
+                result[key] = [
+                    slope | hyperparam_dict for hyperparam_dict in common
+                ]
+
+    return result
+
 
 hyperparams = {
-    "tsh_horizontal_svc": hyperparams_tda_common_svc,
-    "tsh_sloped_svc": [
-        hyperparams_tda_slope | hyperparam_dict
-        for hyperparam_dict in hyperparams_tda_common_svc
-    ],
-    "tsh_sigmoid_svc": [
-        hyperparams_tda_slope | hyperparam_dict
-        for hyperparam_dict in hyperparams_tda_common_svc
-    ],
-    "tsh_arctan_svc": [
-        hyperparams_tda_slope | hyperparam_dict
-        for hyperparam_dict in hyperparams_tda_common_svc
-    ],
-    "tsh_horizontal_rf": hyperparams_tda_common_rf,
-    "tsh_sloped_rf": [
-        hyperparams_tda_slope | hyperparam_dict
-        for hyperparam_dict in hyperparams_tda_common_rf
-    ],
-    "tsh_sigmoid_rf": [
-        hyperparams_tda_slope | hyperparam_dict
-        for hyperparam_dict in hyperparams_tda_common_rf
-    ],
-    "tsh_arctan_rf": [
-        hyperparams_tda_slope | hyperparam_dict
-        for hyperparam_dict in hyperparams_tda_common_rf
-    ],
-    "tsh_aggregated_horizontal_svc": hyperparams_tda_common_svc,
-    "tsh_aggregated_sloped_svc": [
-        hyperparams_tda_slope | hyperparam_dict
-        for hyperparam_dict in hyperparams_tda_common_svc
-    ],
-    "tsh_aggregated_sigmoid_svc": [
-        hyperparams_tda_slope | hyperparam_dict
-        for hyperparam_dict in hyperparams_tda_common_svc
-    ],
-    "tsh_aggregated_arctan_svc": [
-        hyperparams_tda_slope | hyperparam_dict
-        for hyperparam_dict in hyperparams_tda_common_svc
-    ],
-    "tsh_aggregated_horizontal_rf": hyperparams_tda_common_rf,
-    "tsh_aggregated_sloped_rf": [
-        hyperparams_tda_slope | hyperparam_dict
-        for hyperparam_dict in hyperparams_tda_common_rf
-    ],
-    "tsh_aggregated_sigmoid_rf": [
-        hyperparams_tda_slope | hyperparam_dict
-        for hyperparam_dict in hyperparams_tda_common_rf
-    ],
-    "tsh_aggregated_arctan_rf": [
-        hyperparams_tda_slope | hyperparam_dict
-        for hyperparam_dict in hyperparams_tda_common_rf
-    ],
+    **_build_tsh_hyperparams(
+        "tsh",
+        hyperparams_tsh_common_svc,
+        hyperparams_tsh_common_rf,
+        hyperparams_tsh_slope,
+    ),
+    **_build_tsh_hyperparams(
+        "tsh_aggregated",
+        hyperparams_tsh_aggregated_common_svc,
+        hyperparams_tsh_aggregated_common_rf,
+        hyperparams_tsh_aggregated_slope,
+    ),
     "baseline_bjornsdottir_rf": {
-        "rf__n_estimators": [
-            1,
-            10,
-            100,
-            200,
-        ],
-        "rf__max_depth": [
-            1,
-            3,
-            5,
-            7,
-            9,
-        ],
+        "rf__n_estimators": [1, 10, 100, 200],
+        "rf__max_depth": [1, 3, 5, 7, 9],
         "rf__max_features": [  # "auto" is excluded because deprecated
             "sqrt",
             "log2",

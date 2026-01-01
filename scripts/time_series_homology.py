@@ -113,7 +113,7 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
                 for coord in range(1, time_series.shape[1])
             ]
 
-        self.simplex_tree_lists_: list[list[gd.SimplexTree]] = Parallel(
+        self.simplex_tree_lists_: list[list[gd.SimplexTree]] = Parallel(  # ty:ignore[unresolved-attribute]
             n_jobs=self.n_jobs
         )(delayed(_get_simplex_tree_list)(time_series) for time_series in X)
         if self.use_extended_persistence:
@@ -192,7 +192,7 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
     def _get_simplex_tree(
         self,
         time_series: npt.NDArray,
-    ) -> gd.SimplexTree:
+    ) -> gd.SimplexTree:  # ty:ignore[unresolved-attribute]
         """Constructs simplex tree from a single  univariate time series.
 
         Args:
@@ -205,7 +205,7 @@ class TimeSeriesHomology(TransformerMixin, BaseEstimator):
                 filtration of the time series.
         """
         time_series = np.array(time_series, dtype=np.float64)
-        st = gd.SimplexTree()
+        st = gd.SimplexTree()  # ty:ignore[unresolved-attribute]
         vertex_array_vertices = np.arange(len(time_series)).reshape([1, -1])
         filtrations_vertices = self._get_vertex_filtrations(time_series)
         st.insert_batch(

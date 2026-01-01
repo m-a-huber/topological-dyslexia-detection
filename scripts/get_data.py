@@ -6,7 +6,11 @@ import polars as pl
 def get_X_y_groups(
     df: pl.DataFrame,
     model_name: str,
-) -> tuple[list[npt.NDArray] | npt.NDArray, npt.NDArray, npt.NDArray]:
+) -> tuple[
+    list[npt.NDArray] | list[list[npt.NDArray]] | npt.NDArray,
+    npt.NDArray,
+    npt.NDArray,
+]:
     """Given a dataframe produced by `make_dataframes.get_df`, this function
     creates `X`, `y` and `groups` for subsequent passing to
     `StratifiedGroupKFold`.
@@ -19,13 +23,25 @@ def get_X_y_groups(
             `'baseline_raatikainen'`.
 
     Returns:
-        tuple[list[npt.NDArray] | npt.NDArray, npt.NDArray, npt.NDArray]:
+        tuple[
+            list[npt.NDArray] | list[list[npt.NDArray]] | npt.NDArray,
+            npt.NDArray,
+            npt.NDArray,
+        ]:
             Tuple containing `X`, `y` and `groups`.
     """
-    if model_name in ["tsh", "tsh_aggregated"]:  # time series homology
+    if model_name == "tsh":  # time series homology
         X = [
             np.array(time_series, dtype=float)
             for time_series in df["time_series"].to_list()
+        ]
+    elif model_name == "tsh_aggregated":
+        X = [
+            [
+                np.array(time_series, dtype=float)
+                for time_series in time_series_list
+            ]
+            for time_series_list in df["time_series_list"].to_list()
         ]
     elif model_name == "baseline_bjornsdottir":
         X = (
