@@ -60,43 +60,27 @@ class ListTransformer(BaseEstimator, TransformerMixin):
     """Helper class that, given a sklearn-estimator that can be applied to a
     list of points, creates a version of that estimator that can be applied to
     a list of lists of points. The estimator is applied to the flattened list
-    of points or to each list of points separately, depending on whether
-    `concatenate` is set to `True` or `False`, respectively.
+    of points, and the result is returned as a list of lists of points whose
+    shape matches that of the input.
     """
 
-    def __init__(self, base_estimator, concatenate):
+    def __init__(self, base_estimator):
         self.base_estimator = base_estimator
-        self.concatenate = concatenate
 
     def fit(self, X, y=None):  # noqa: ARG002
-        if self.concatenate:
-            try:
-                X_concat = np.array([el for x in X for el in x])
-            except ValueError:
-                X_concat = [el for x in X for el in x]
-            self.estimator_ = clone(self.base_estimator).fit(X_concat, None)
-        else:
-            self.estimators_ = [
-                clone(self.base_estimator).fit(x, None) for x in X
-            ]
+        try:
+            X_concat = np.array([el for x in X for el in x])
+        except ValueError:
+            X_concat = [el for x in X for el in x]
+        self.estimator_ = clone(self.base_estimator).fit(X_concat, None)
         return self
 
     def transform(self, X):
-        if self.concatenate:
-            out = [self.estimator_.transform(arr) for arr in X]
-            try:
-                return np.array(out)
-            except ValueError:
-                return out
-        else:
-            out = [
-                estimator.transform(x)
-                for estimator, x in zip(self.estimators_, X)
-            ]
-            try:
-                return np.array(out)
-            except ValueError:
-                return out
+        out = [self.estimator_.transform(arr) for arr in X]
+        try:
+            return np.array(out)
+        except ValueError:
+            return out
 
 
 class PersistenceProcessor(BaseEstimator, TransformerMixin):
@@ -165,4 +149,4 @@ class MeanAggregator(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, X):
-        return np.array([X.mean(axis=0) for X in X])
+        return np.array([x.mean(axis=0) for x in X])

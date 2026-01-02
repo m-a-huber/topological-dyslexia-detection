@@ -234,8 +234,7 @@ def get_pipeline(
                 (
                     "time_series_scaler",
                     ListTransformer(
-                        base_estimator=MinMaxScaler(feature_range=(0, 1)),
-                        concatenate=True,
+                        base_estimator=MinMaxScaler(feature_range=(0, 1))
                     ),
                 ),
                 (
@@ -252,8 +251,7 @@ def get_pipeline(
                     ListTransformer(
                         gdrep.PersistenceImage(
                             resolution=(50, 50),
-                        ),
-                        concatenate=True,
+                        )
                     ),
                 ),
                 (
@@ -280,10 +278,8 @@ def get_pipeline(
                     "time_series_scaler",
                     ListTransformer(
                         base_estimator=ListTransformer(
-                            base_estimator=MinMaxScaler(feature_range=(0, 1)),
-                            concatenate=True,
-                        ),
-                        concatenate=True,
+                            base_estimator=MinMaxScaler(feature_range=(0, 1))
+                        )
                     ),
                 ),
                 (
@@ -293,13 +289,12 @@ def get_pipeline(
                             filtration_type=args.filtration_type,
                             use_extended_persistence=args.use_extended_persistence,
                             drop_inf_persistence=not args.use_extended_persistence,  # noqa: E501
-                        ),
-                        concatenate=False,
+                        )
                     ),
                 ),
                 (
                     "persistence_processor",
-                    ListTransformer(PersistenceProcessor(), concatenate=False),
+                    ListTransformer(PersistenceProcessor()),
                 ),
                 (
                     "persistence_imager",
@@ -307,10 +302,8 @@ def get_pipeline(
                         base_estimator=ListTransformer(
                             base_estimator=gdrep.PersistenceImage(
                                 resolution=(50, 50),
-                            ),
-                            concatenate=True,
-                        ),
-                        concatenate=True,
+                            )
+                        )
                     ),
                 ),
                 (
@@ -318,8 +311,7 @@ def get_pipeline(
                     ListTransformer(
                         base_estimator=PersistenceImageProcessor(
                             feature_range=(0, 1)
-                        ),
-                        concatenate=True,
+                        )
                     ),
                 ),
                 (
@@ -331,8 +323,7 @@ def get_pipeline(
                             if args.use_extended_persistence
                             else 250,
                             random_state=rng.integers(low=0, high=2**32),
-                        ),
-                        concatenate=True,
+                        )
                     ),
                 ),
                 (
