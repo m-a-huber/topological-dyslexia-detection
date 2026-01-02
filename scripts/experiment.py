@@ -104,8 +104,12 @@ def parse_args():
     parser.add_argument(
         "--n-splits",
         type=int,
-        default=10,
-        help=("Number of splits to create for nested CV"),
+        default=None,
+        help=(
+            "Number of splits to create for nested CV (if None, 10 and 5 "
+            "splits will be used for trial-level and reader-level models, "
+            "respectively)"
+        ),
     )
     parser.add_argument(
         "--n-iter",
@@ -148,7 +152,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def validate_args(
+def process_args(
     args: argparse.Namespace,
 ) -> None:
     """Validates the arguments provided."""
@@ -185,6 +189,17 @@ def validate_args(
                 f"{constants.admissible_classifiers_raatikainen}, but got "
                 f"'{args.classifier}' instead."
             )
+    # Set default number of splits if not provided
+    if args.n_splits is None and args.model_name in [
+        "tsh",
+        "baseline_bjornsdottir",
+    ]:
+        args.n_splits = 10
+    elif args.n_splits is None and args.model_name in [
+        "tsh_aggregated",
+        "baseline_raatikainen",
+    ]:
+        args.n_splits = 5
     return
 
 
@@ -217,7 +232,6 @@ def get_pipeline(
         clf = (
             "svc",
             SVC(
-                probability=True,
                 random_state=rng.integers(low=0, high=2**32),
             ),
         )
@@ -396,7 +410,7 @@ def get_split_idxs(
 
 def main() -> None:
     args = parse_args()
-    validate_args(args)
+    process_args(args)
     rng = np.random.default_rng(seed=args.seed)
     outdir = "outfiles"
     if args.exclude_l2:
@@ -535,22 +549,26 @@ def main() -> None:
             )
             # Get predictions from best model on test data
             y_pred = best_estimator.predict(X_test)
-            y_pred_proba = best_estimator.predict_proba(X_test)[:, 1]
+            # Use decision_function for SVC, predict_proba for RF
+            if args.classifier == "svc":
+                y_pred_scores = best_estimator.decision_function(X_test)
+            elif args.classifier == "rf":
+                y_pred_scores = best_estimator.predict_proba(X_test)[:, 1]
             # Get ROC AUC metrics
-            fp_rate, tp_rate, thresholds_roc = roc_curve(y_test, y_pred_proba)
+            fp_rate, tp_rate, thresholds_roc = roc_curve(y_test, y_pred_scores)
             cv_results["roc_curve"].append(
                 (fp_rate.tolist(), tp_rate.tolist(), thresholds_roc.tolist())
             )
-            test_roc_auc = roc_auc_score(y_test, y_pred_proba)
+            test_roc_auc = roc_auc_score(y_test, y_pred_scores)
             cv_results["roc_auc"].append(test_roc_auc)
             # Get precision-recall metrics
             precision, recall, thresholds_pr = precision_recall_curve(
-                y_test, y_pred_proba
+                y_test, y_pred_scores
             )
             cv_results["pr_curve"].append(
                 (precision.tolist(), recall.tolist(), thresholds_pr.tolist())
             )
-            test_pr_auc = average_precision_score(y_test, y_pred_proba)
+            test_pr_auc = average_precision_score(y_test, y_pred_scores)
             cv_results["pr_auc"].append(test_pr_auc)
             # Get accuracy
             test_accuracy = accuracy_score(y_test, y_pred)

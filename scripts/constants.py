@@ -104,13 +104,13 @@ def _get_common_svc_hyperparams(bandwidth_param: str) -> list[dict]:
     """Generate common SVC hyperparameters for TSH models."""
     return [
         {
-            bandwidth_param: loguniform(1e-3, 1e-1),
+            bandwidth_param: loguniform(1e-3, 1e-2),
             "svc__kernel": ["rbf"],
             "svc__C": loguniform(1e-1, 1e2),
             "svc__gamma": loguniform(1e-4, 1e-2),
         },
         {
-            bandwidth_param: loguniform(1e-3, 1e-1),
+            bandwidth_param: loguniform(1e-3, 1e-2),
             "svc__kernel": ["linear"],
             "svc__C": loguniform(1e-2, 1e1),
         },
@@ -121,20 +121,20 @@ def _get_common_rf_hyperparams(bandwidth_param: str) -> list[dict]:
     """Generate common RF hyperparameters for TSH models."""
     return [
         {
-            bandwidth_param: loguniform(1e-3, 1e-1),
-            "rf__n_estimators": randint(100, 2000),
+            bandwidth_param: loguniform(1e-3, 1e-2),
             "rf__max_depth": [None],
-            "rf__min_samples_split": randint(2, 50),
-            "rf__min_samples_leaf": randint(1, 50),
             "rf__max_features": ["sqrt", "log2", None],
+            "rf__min_samples_leaf": randint(1, 20),
+            "rf__min_samples_split": randint(2, 20),
+            "rf__n_estimators": randint(100, 1500),
         },
         {
-            bandwidth_param: loguniform(1e-3, 1e-1),
-            "rf__n_estimators": randint(100, 2000),
+            bandwidth_param: loguniform(1e-3, 1e-2),
             "rf__max_depth": randint(3, 50),
-            "rf__min_samples_split": randint(2, 50),
-            "rf__min_samples_leaf": randint(1, 50),
             "rf__max_features": uniform(0.05, 0.95),
+            "rf__min_samples_leaf": randint(1, 20),
+            "rf__min_samples_split": randint(2, 20),
+            "rf__n_estimators": randint(100, 1500),
         },
     ]
 
