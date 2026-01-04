@@ -282,6 +282,46 @@ def get_df(
                 )
                 data_dict["total_fixation_count"].append(len(df_subject))
             df_out = pl.from_dict(data_dict)
+        elif model_name == "baseline_bjornsdottir_with_tsh":
+            df_baseline = get_df(
+                model_name="baseline_bjornsdottir",
+                min_n_fixations=min_n_fixations,
+                include_l2=include_l2,
+                verbose=verbose,
+                overwrite=overwrite,
+            )
+            df_tsh = get_df(
+                model_name="tsh",
+                min_n_fixations=min_n_fixations,
+                include_l2=include_l2,
+                verbose=verbose,
+                overwrite=overwrite,
+            )
+            df_out = df_baseline.join(
+                df_tsh,
+                on=["READER_ID", "LABEL", "TRIAL_ID", "SAMPLE_ID"],
+                how="inner",
+            )
+        elif model_name == "baseline_raatikainen_with_tsh_aggregated":
+            df_baseline = get_df(
+                model_name="baseline_raatikainen",
+                min_n_fixations=min_n_fixations,
+                include_l2=include_l2,
+                verbose=verbose,
+                overwrite=overwrite,
+            )
+            df_tsh = get_df(
+                model_name="tsh_aggregated",
+                min_n_fixations=min_n_fixations,
+                include_l2=include_l2,
+                verbose=verbose,
+                overwrite=overwrite,
+            )
+            df_out = df_baseline.join(
+                df_tsh,
+                on=["READER_ID", "LABEL"],
+                how="inner",
+            )
         df_out_path.parent.mkdir(parents=True, exist_ok=True)
         df_out.write_json(df_out_path)
         if verbose:

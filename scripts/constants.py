@@ -1,9 +1,13 @@
 # ruff: noqa: E501
+"""Constants and hyperparameter definitions for CopCo experiments."""
+
 from scipy.stats import loguniform, randint, uniform
 
 from scripts.utils import UniformSlopeSym
 
-# relevant subject IDs
+# ============================================================================
+# Subject IDs
+# ============================================================================
 
 subjects_non_dys_l1 = [
     "02",
@@ -67,13 +71,17 @@ subjects_non_dys_l2 = [
     "58",
 ]
 
-# constants for validation of arguments
+# ============================================================================
+# Validation Constants
+# ============================================================================
 
 admissible_model_names = [
     "tsh",  # time series homology
     "tsh_aggregated",
     "baseline_bjornsdottir",
     "baseline_raatikainen",
+    "baseline_bjornsdottir_with_tsh",
+    "baseline_raatikainen_with_tsh_aggregated",
 ]
 
 admissible_filtration_types_tsh = [
@@ -97,7 +105,9 @@ admissible_classifiers_raatikainen = [
     "rf",
 ]
 
-# Helper functions to generate hyperparameter distributions
+# ============================================================================
+# Hyperparameter Helper Functions for TSH Models
+# ============================================================================
 
 
 def _get_common_svc_hyperparams(bandwidth_param: str) -> list[dict]:
@@ -146,7 +156,9 @@ def _get_slope_hyperparams(slope_param: str) -> dict:
     }
 
 
-# hyperparameter distributions for tsh
+# ============================================================================
+# TSH Model Hyperparameter Definitions
+# ============================================================================
 
 hyperparams_tsh_common_svc = _get_common_svc_hyperparams(
     "persistence_imager__base_estimator__bandwidth"
@@ -155,8 +167,6 @@ hyperparams_tsh_common_rf = _get_common_rf_hyperparams(
     "persistence_imager__base_estimator__bandwidth"
 )
 hyperparams_tsh_slope = _get_slope_hyperparams("time_series_homology__slope")
-
-# hyperparameter distributions for tsh_aggregated
 
 hyperparams_tsh_aggregated_common_svc = _get_common_svc_hyperparams(
     "persistence_imager__base_estimator__base_estimator__bandwidth"
@@ -168,10 +178,11 @@ hyperparams_tsh_aggregated_slope = _get_slope_hyperparams(
     "time_series_homology__base_estimator__slope"
 )
 
-# hyperparameter distributions for all models
+# ============================================================================
+# Hyperparameter Building Functions
+# ============================================================================
 
 
-# Helper function to build TSH hyperparams
 def _build_tsh_hyperparams(
     model_prefix: str,
     common_svc: list[dict],
@@ -196,6 +207,71 @@ def _build_tsh_hyperparams(
 
     return result
 
+
+def _build_combined_hyperparams(
+    tsh_model_prefix: str,
+    baseline_model_name: str,
+    classifier: str,
+    tsh_common_rf: list[dict],
+    tsh_slope: dict,
+    baseline_hyperparams: dict,
+) -> dict:
+    """Build hyperparameter dictionary for combined models."""
+    filtration_types_with_slope = ["sloped", "sigmoid", "arctan"]
+    result = {}
+    # Determine parameter name prefixes based on TSH model type
+    if tsh_model_prefix == "tsh":
+        bandwidth_param = (
+            "feature_union__tsh_features__persistence_imager__"
+            "base_estimator__bandwidth"
+        )
+        slope_param = (
+            "feature_union__tsh_features__time_series_homology__slope"
+        )
+    elif tsh_model_prefix == "tsh_aggregated":
+        bandwidth_param = (
+            "feature_union__tsh_features__persistence_imager__"
+            "base_estimator__base_estimator__bandwidth"
+        )
+        slope_param = (
+            "feature_union__tsh_features__time_series_homology__"
+            "base_estimator__slope"
+        )
+    # Extract and prefix TSH hyperparameters (only bandwidth, not classifier)
+    # Since both dicts in tsh_common_rf have the same bandwidth distribution,
+    # we only need one (they differ only in classifier params we don't use)
+    first_tsh_dict = tsh_common_rf[0]
+    base_tsh_dict = {}
+    for param_name, param_value in first_tsh_dict.items():
+        if "bandwidth" in param_name:
+            base_tsh_dict[bandwidth_param] = param_value
+
+    # Build combined hyperparameters for each filtration type
+    for filtration_type in ["horizontal", *filtration_types_with_slope]:
+        key = (
+            f"baseline_{baseline_model_name}_with_{tsh_model_prefix}_"
+            f"{filtration_type}_{classifier}"
+        )
+        # Add slope parameter for non-horizontal filtrations
+        if filtration_type != "horizontal":
+            tsh_dict_with_slope = base_tsh_dict.copy()
+            tsh_dict_with_slope[slope_param] = tsh_slope[
+                next(iter(tsh_slope.keys()))
+            ]
+        else:
+            tsh_dict_with_slope = base_tsh_dict.copy()
+        # Merge baseline hyperparameters
+        final_dict = tsh_dict_with_slope.copy()
+        for param_name, param_value in baseline_hyperparams.items():
+            final_dict[param_name] = param_value
+        # Return as single dict (RandomizedSearchCV can accept dict or list of dicts)
+        result[key] = final_dict
+    return result
+
+
+# ============================================================================
+# Main Hyperparameter Dictionary
+# ============================================================================
 
 hyperparams = {
     **_build_tsh_hyperparams(
@@ -271,3 +347,41 @@ hyperparams = {
         ],
     },
 }
+
+# ============================================================================
+# Combined Model Hyperparameters
+# ============================================================================
+
+# baseline_bjornsdottir_with_tsh (trial-level TSH + baseline features)
+hyperparams.update(
+    _build_combined_hyperparams(
+        "tsh",
+        "bjornsdottir",
+        "rf",
+        hyperparams_tsh_common_rf,
+        hyperparams_tsh_slope,
+        hyperparams["baseline_bjornsdottir_rf"],
+    )
+)
+
+# baseline_raatikainen_with_tsh_aggregated (reader-level TSH + baseline features)
+hyperparams.update(
+    _build_combined_hyperparams(
+        "tsh_aggregated",
+        "raatikainen",
+        "svc",
+        hyperparams_tsh_aggregated_common_rf,
+        hyperparams_tsh_aggregated_slope,
+        hyperparams["baseline_raatikainen_svc"],
+    )
+)
+hyperparams.update(
+    _build_combined_hyperparams(
+        "tsh_aggregated",
+        "raatikainen",
+        "rf",
+        hyperparams_tsh_aggregated_common_rf,
+        hyperparams_tsh_aggregated_slope,
+        hyperparams["baseline_raatikainen_rf"],
+    )
+)

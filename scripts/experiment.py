@@ -22,7 +22,7 @@ from sklearn.model_selection import (
     RandomizedSearchCV,
     StratifiedGroupKFold,
 )
-from sklearn.pipeline import Pipeline
+from sklearn.pipeline import FeatureUnion, Pipeline
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.svm import SVC
 from tqdm import tqdm
@@ -34,6 +34,7 @@ from scripts.utils import (
     MeanAggregator,
     PersistenceImageProcessor,
     PersistenceProcessor,
+    TupleElementSelector,
 )
 
 
@@ -153,10 +154,13 @@ def parse_args():
 
 
 def process_args(
+    model_name: str,
     args: argparse.Namespace,
 ) -> None:
-    """Validates the arguments provided."""
-    if args.model_name in ["tsh", "tsh_aggregated"]:
+    """Validates the arguments provided and sets the number of splits if not
+    provided.
+    """
+    if model_name in ["tsh", "tsh_aggregated"]:
         if (
             args.filtration_type
             not in constants.admissible_filtration_types_tsh
@@ -172,7 +176,7 @@ def process_args(
                 f"{constants.admissible_classifiers_tsh}, but got "
                 f"'{args.classifier}' instead."
             )
-    elif args.model_name == "baseline_bjornsdottir":
+    elif model_name == "baseline_bjornsdottir":
         if (
             args.classifier
             not in constants.admissible_classifiers_bjornsdottir
@@ -182,20 +186,26 @@ def process_args(
                 f"{constants.admissible_classifiers_bjornsdottir}, but got "
                 f"'{args.classifier}' instead."
             )
-    elif args.model_name == "baseline_raatikainen":
+    elif model_name == "baseline_raatikainen":
         if args.classifier not in constants.admissible_classifiers_raatikainen:
             raise ValueError(
                 "Invalid classifier for Raatikainen-baseline; must be in "
                 f"{constants.admissible_classifiers_raatikainen}, but got "
                 f"'{args.classifier}' instead."
             )
+    elif model_name == "baseline_bjornsdottir_with_tsh":
+        process_args(model_name="baseline_bjornsdottir", args=args)
+        process_args(model_name="tsh", args=args)
+    elif model_name == "baseline_raatikainen_with_tsh_aggregated":
+        process_args(model_name="baseline_raatikainen", args=args)
+        process_args(model_name="tsh_aggregated", args=args)
     # Set default number of splits if not provided
-    if args.n_splits is None and args.model_name in [
+    if args.n_splits is None and model_name in [
         "tsh",
         "baseline_bjornsdottir",
     ]:
         args.n_splits = 10
-    elif args.n_splits is None and args.model_name in [
+    elif args.n_splits is None and model_name in [
         "tsh_aggregated",
         "baseline_raatikainen",
     ]:
@@ -208,7 +218,12 @@ def get_cv_results_file_path(
     args: argparse.Namespace,
 ) -> Path:
     """Creates name of file storing results."""
-    if args.model_name in ["tsh", "tsh_aggregated"]:
+    if args.model_name in [
+        "tsh",
+        "tsh_aggregated",
+        "baseline_bjornsdottir_with_tsh",
+        "baseline_raatikainen_with_tsh_aggregated",
+    ]:
         persistence_type = (
             "extended" if args.use_extended_persistence else "ordinary"
         )
@@ -225,6 +240,7 @@ def get_cv_results_file_path(
 
 
 def get_pipeline(
+    model_name: str,
     args: argparse.Namespace,
     rng: np.random.Generator,
 ) -> Pipeline:
@@ -240,9 +256,10 @@ def get_pipeline(
             "rf",
             RandomForestClassifier(
                 random_state=rng.integers(low=0, high=2**32),
+                n_jobs=1,
             ),
         )
-    if args.model_name == "tsh":
+    if model_name == "tsh":
         pipeline = Pipeline(
             [
                 (
@@ -257,6 +274,7 @@ def get_pipeline(
                         filtration_type=args.filtration_type,
                         use_extended_persistence=args.use_extended_persistence,
                         drop_inf_persistence=not args.use_extended_persistence,
+                        n_jobs=1,
                     ),
                 ),
                 ("persistence_processor", PersistenceProcessor()),
@@ -285,7 +303,7 @@ def get_pipeline(
                 clf,
             ]
         )
-    elif args.model_name == "tsh_aggregated":
+    elif model_name == "tsh_aggregated":
         pipeline = Pipeline(
             [
                 (
@@ -303,6 +321,7 @@ def get_pipeline(
                             filtration_type=args.filtration_type,
                             use_extended_persistence=args.use_extended_persistence,
                             drop_inf_persistence=not args.use_extended_persistence,  # noqa: E501
+                            n_jobs=1,
                         )
                     ),
                 ),
@@ -347,7 +366,7 @@ def get_pipeline(
                 clf,
             ]
         )
-    elif args.model_name == "baseline_bjornsdottir":
+    elif model_name == "baseline_bjornsdottir":
         pipeline = ImbalancedPipeline(
             [
                 (
@@ -365,7 +384,7 @@ def get_pipeline(
                 clf,
             ]
         )
-    elif args.model_name == "baseline_raatikainen":
+    elif model_name == "baseline_raatikainen":
         pipeline = Pipeline(
             [
                 (
@@ -375,6 +394,74 @@ def get_pipeline(
                     ),
                 ),
                 clf,
+            ]
+        )
+    elif model_name == "baseline_bjornsdottir_with_tsh":
+        pipeline_baseline = get_pipeline(
+            model_name="baseline_bjornsdottir", args=args, rng=rng
+        )
+        pipeline_tsh = get_pipeline(model_name="tsh", args=args, rng=rng)
+        features_baseline = Pipeline(
+            [
+                ("extract_baseline", TupleElementSelector(element_idx=0)),
+                *pipeline_baseline.steps[
+                    :-2
+                ],  # move classifier and downsampler to end of pipeline
+            ]
+        )
+        features_tsh = Pipeline(
+            [
+                ("extract_tsh", TupleElementSelector(element_idx=1)),
+                *pipeline_tsh.steps[:-1],
+            ]  # move classifier to end of pipeline
+        )
+        pipeline = ImbalancedPipeline(
+            [
+                (
+                    "feature_union",
+                    FeatureUnion(
+                        [
+                            ("baseline_features", features_baseline),
+                            ("tsh_features", features_tsh),
+                        ]
+                    ),
+                ),
+                *pipeline_baseline.steps[-2:],
+            ]
+        )
+    elif model_name == "baseline_raatikainen_with_tsh_aggregated":
+        pipeline_baseline = get_pipeline(
+            model_name="baseline_raatikainen", args=args, rng=rng
+        )
+        pipeline_tsh = get_pipeline(
+            model_name="tsh_aggregated", args=args, rng=rng
+        )
+        features_baseline = Pipeline(
+            [
+                ("extract_baseline", TupleElementSelector(element_idx=0)),
+                *pipeline_baseline.steps[
+                    :-1
+                ],  # move classifier to end of pipeline
+            ]
+        )
+        features_tsh = Pipeline(
+            [
+                ("extract_tsh", TupleElementSelector(element_idx=1)),
+                *pipeline_tsh.steps[:-1],
+            ]  # move classifier to end of pipeline
+        )
+        pipeline = Pipeline(
+            [
+                (
+                    "feature_union",
+                    FeatureUnion(
+                        [
+                            ("baseline_features", features_baseline),
+                            ("tsh_features", features_tsh),
+                        ]
+                    ),
+                ),
+                *pipeline_baseline.steps[-1:],
             ]
         )
     return pipeline
@@ -410,7 +497,7 @@ def get_split_idxs(
 
 def main() -> None:
     args = parse_args()
-    process_args(args)
+    process_args(model_name=args.model_name, args=args)
     rng = np.random.default_rng(seed=args.seed)
     outdir = "outfiles"
     if args.exclude_l2:
@@ -427,7 +514,9 @@ def main() -> None:
                 )
             ]
             search_kind = "random"
-            pipeline = get_pipeline(args, rng)
+            pipeline = get_pipeline(
+                model_name=args.model_name, args=args, rng=rng
+            )
         elif args.model_name in [
             "baseline_bjornsdottir",
             "baseline_raatikainen",
@@ -436,7 +525,22 @@ def main() -> None:
                 "_".join([args.model_name, args.classifier])
             ]
             search_kind = "grid"
-            pipeline = get_pipeline(args, rng)
+            pipeline = get_pipeline(
+                model_name=args.model_name, args=args, rng=rng
+            )
+        elif args.model_name in [
+            "baseline_bjornsdottir_with_tsh",
+            "baseline_raatikainen_with_tsh_aggregated",
+        ]:
+            hyperparams = constants.hyperparams[
+                "_".join(
+                    [args.model_name, args.filtration_type, args.classifier]
+                )
+            ]
+            search_kind = "random"
+            pipeline = get_pipeline(
+                model_name=args.model_name, args=args, rng=rng
+            )
         # Get dataframe with data
         df = get_dataframes.get_df(
             model_name=args.model_name,

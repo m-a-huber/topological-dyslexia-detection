@@ -150,3 +150,18 @@ class MeanAggregator(BaseEstimator, TransformerMixin):
 
     def transform(self, X):
         return np.array([x.mean(axis=0) for x in X])
+
+
+class TupleElementSelector(BaseEstimator, TransformerMixin):
+    """Helper class that extracts a specific element from a tuple."""
+
+    def __init__(self, element_idx: int):
+        self.element_idx = element_idx
+
+    def fit(self, X, y=None):  # noqa: ARG002
+        self._is_fitted_ = True
+        return self
+
+    def transform(self, X):
+        """Extract the element at the specified index from each sample."""
+        return [x[self.element_idx] for x in X]

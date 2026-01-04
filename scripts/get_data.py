@@ -7,7 +7,7 @@ def get_X_y_groups(
     df: pl.DataFrame,
     model_name: str,
 ) -> tuple[
-    list[npt.NDArray] | list[list[npt.NDArray]] | npt.NDArray,
+    list | npt.NDArray,
     npt.NDArray,
     npt.NDArray,
 ]:
@@ -24,7 +24,7 @@ def get_X_y_groups(
 
     Returns:
         tuple[
-            list[npt.NDArray] | list[list[npt.NDArray]] | npt.NDArray,
+            list | npt.NDArray,
             npt.NDArray,
             npt.NDArray,
         ]:
@@ -51,6 +51,40 @@ def get_X_y_groups(
         )
     elif model_name == "baseline_raatikainen":
         X = df.drop("READER_ID", "LABEL").to_numpy()
+    elif model_name == "baseline_bjornsdottir_with_tsh":
+        X_baseline = (
+            df.drop(
+                "READER_ID", "LABEL", "TRIAL_ID", "SAMPLE_ID", "time_series"
+            )
+            .to_numpy()
+            .astype(float)
+        )
+        X_tsh = [
+            np.array(time_series, dtype=float)
+            for time_series in df["time_series"].to_list()
+        ]
+        assert len(X_baseline) == len(X_tsh)
+        X = [
+            (x_baseline, x_tsh) for x_baseline, x_tsh in zip(X_baseline, X_tsh)
+        ]
+    elif model_name == "baseline_raatikainen_with_tsh_aggregated":
+        X_baseline = df.drop(
+            "READER_ID", "LABEL", "time_series_list"
+        ).to_numpy()
+        X_tsh_aggregated = [
+            [
+                np.array(time_series, dtype=float)
+                for time_series in time_series_list
+            ]
+            for time_series_list in df["time_series_list"].to_list()
+        ]
+        assert len(X_baseline) == len(X_tsh_aggregated)
+        X = [
+            (x_baseline, x_tsh_aggregated)
+            for x_baseline, x_tsh_aggregated in zip(
+                X_baseline, X_tsh_aggregated
+            )
+        ]
     y = df["LABEL"].to_numpy().astype(int)
     groups = df["READER_ID"].to_numpy().astype(int)
     return X, y, groups
