@@ -7,11 +7,18 @@ from sklearn.base import (  # type: ignore
 )
 
 
-def weight_abs1p(pt):
-    """Custom weight function for persistence images that weighs points in a
-    persistence diagram by lifetime plus 1.
+def weight_by_lifetime(pt):
+    """Weight function for persistence images that weighs points in a
+    persistence diagram by their lifetime.
     """
-    return np.abs(pt[1]) + 1
+    return np.abs(pt[1])
+
+
+def weight_constant(pt):  # noqa: ARG001
+    """Weight function for persistence images that weighs points in a
+    persistence diagram by 1.
+    """
+    return 1
 
 
 def group_by_mean(X, groups):
@@ -21,6 +28,20 @@ def group_by_mean(X, groups):
     return np.array(
         [X[groups == group].mean(axis=0) for group in np.unique(groups)]
     )
+
+
+class NestedDict(dict):
+    """Helper class to create nested dictionaries of arbitrary depth."""
+
+    def __missing__(self, key):
+        value = self[key] = type(self)()
+        return value
+
+    def to_dict(self):
+        return {
+            k: v.to_dict() if isinstance(v, NestedDict) else v
+            for k, v in self.items()
+        }
 
 
 class UniformSlope(rv_continuous):
