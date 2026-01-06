@@ -27,7 +27,7 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.svm import SVC
 from tqdm import tqdm
 
-from scripts import constants, get_data, get_dataframes
+from scripts import constants, get_data
 from scripts.time_series_homology import TimeSeriesHomology
 from scripts.utils import (
     ListTransformer,
@@ -59,7 +59,14 @@ def parse_args():
         type=str,
         required=True,
         choices=constants.admissible_model_names,
-        help=("Name of model to run"),
+        help="Name of model to run",
+    )
+    parser.add_argument(
+        "--level",
+        type=str,
+        required=True,
+        choices=constants.admissible_levels,
+        help="Level on which to aggregate data",
     )
     parser.add_argument(
         "--classifier",
@@ -74,10 +81,7 @@ def parse_args():
         "--filtration-type",
         type=str,
         choices=["horizontal", "sloped", "sigmoid", "arctan"],
-        help=(
-            "Filtration type to use (ignored unless model name is 'tsh' or "
-            "'tsh_aggregated')"
-        ),
+        help=("Filtration type to use (ignored unless model name is 'tsh')"),
     )
     parser.add_argument(
         "--use-extended-persistence",
@@ -85,7 +89,7 @@ def parse_args():
         help=(
             "Compute extended persistence of time series (as opposed to "
             "ordinary persistence; ignored unless model name is "
-            "'tsh' or 'tsh_aggregated')"
+            "'tsh')"
         ),
     )
     parser.add_argument(
@@ -99,7 +103,7 @@ def parse_args():
         default=5,
         help=(
             "Minimum number of fixation for a trial not to be discarded "
-            "(ignored unless model name is 'tsh' or 'tsh_aggregated')"
+            "(ignored unless model name is 'tsh')"
         ),
     )
     parser.add_argument(
@@ -115,10 +119,10 @@ def parse_args():
     parser.add_argument(
         "--n-iter",
         type=int,
-        default=100,
+        default=200,
         help=(
             "Number of iterations for randomized hyperparameter search "
-            "(ignored unless model name is 'tsh' or 'tsh_aggregated')"
+            "(ignored unless model name is 'tsh')"
         ),
     )
     parser.add_argument(
@@ -160,7 +164,7 @@ def process_args(
     """Validates the arguments provided and sets the number of splits if not
     provided.
     """
-    if model_name in ["tsh", "tsh_aggregated"]:
+    if model_name == "tsh":
         if (
             args.filtration_type
             not in constants.admissible_filtration_types_tsh
@@ -195,22 +199,31 @@ def process_args(
             )
     elif model_name == "baseline_bjornsdottir_with_tsh":
         process_args(model_name="baseline_bjornsdottir", args=args)
-        process_args(model_name="tsh", args=args)
-    elif model_name == "baseline_raatikainen_with_tsh_aggregated":
+        if (
+            args.filtration_type
+            not in constants.admissible_filtration_types_tsh
+        ):
+            raise ValueError(
+                "Invalid filtration type for TDA-experiment; must be in "
+                f"{constants.admissible_filtration_types_tsh}, but "
+                f"got '{args.filtration_type}' instead."
+            )
+    elif model_name == "baseline_raatikainen_with_tsh":
         process_args(model_name="baseline_raatikainen", args=args)
-        process_args(model_name="tsh_aggregated", args=args)
+        if (
+            args.filtration_type
+            not in constants.admissible_filtration_types_tsh
+        ):
+            raise ValueError(
+                "Invalid filtration type for TDA-experiment; must be in "
+                f"{constants.admissible_filtration_types_tsh}, but "
+                f"got '{args.filtration_type}' instead."
+            )
     # Set default number of splits if not provided
-    if args.n_splits is None and model_name in [
-        "tsh",
-        "baseline_bjornsdottir",
-    ]:
+    if args.level == "trial" and args.n_splits is None:
         args.n_splits = 10
-    elif args.n_splits is None and model_name in [
-        "tsh_aggregated",
-        "baseline_raatikainen",
-    ]:
+    elif args.level == "reader" and args.n_splits is None:
         args.n_splits = 5
-    return
 
 
 def get_cv_results_file_path(
@@ -220,20 +233,19 @@ def get_cv_results_file_path(
     """Creates name of file storing results."""
     if args.model_name in [
         "tsh",
-        "tsh_aggregated",
         "baseline_bjornsdottir_with_tsh",
-        "baseline_raatikainen_with_tsh_aggregated",
+        "baseline_raatikainen_with_tsh",
     ]:
         persistence_type = (
             "extended" if args.use_extended_persistence else "ordinary"
         )
         cv_results_file_path = outdir / (
-            f"cv_results_{args.model_name}_{args.filtration_type}"
+            f"cv_results_{args.model_name}_{args.level}_level_{args.filtration_type}"
             f"_{persistence_type}_{args.classifier}_seed_{args.seed}.json"
         )
     elif args.model_name in ["baseline_bjornsdottir", "baseline_raatikainen"]:
         cv_results_file_path = outdir / (
-            f"cv_results_{args.model_name}_{args.classifier}"
+            f"cv_results_{args.model_name}_{args.level}_level_{args.classifier}"
             f"_seed_{args.seed}.json"
         )
     return cv_results_file_path
@@ -259,7 +271,7 @@ def get_pipeline(
                 n_jobs=1,
             ),
         )
-    if model_name == "tsh":
+    if model_name == "tsh" and args.level == "trial":
         pipeline = Pipeline(
             [
                 (
@@ -303,7 +315,7 @@ def get_pipeline(
                 clf,
             ]
         )
-    elif model_name == "tsh_aggregated":
+    elif model_name == "tsh" and args.level == "reader":
         pipeline = Pipeline(
             [
                 (
@@ -429,13 +441,11 @@ def get_pipeline(
                 *pipeline_baseline.steps[-2:],
             ]
         )
-    elif model_name == "baseline_raatikainen_with_tsh_aggregated":
+    elif model_name == "baseline_raatikainen_with_tsh":
         pipeline_baseline = get_pipeline(
             model_name="baseline_raatikainen", args=args, rng=rng
         )
-        pipeline_tsh = get_pipeline(
-            model_name="tsh_aggregated", args=args, rng=rng
-        )
+        pipeline_tsh = get_pipeline(model_name="tsh", args=args, rng=rng)
         features_baseline = Pipeline(
             [
                 ("extract_baseline", TupleElementSelector(element_idx=0)),
@@ -507,43 +517,25 @@ def main() -> None:
     tqdm.write(f" RUNNING MODEL '{experiment_name}' ".center(120, "*"))
     if not cv_results_file_path.exists() or args.overwrite:
         # Get pipeline and corresponding hyperparameter distributions
-        if args.model_name in ["tsh", "tsh_aggregated"]:
-            hyperparams = constants.hyperparams[
-                "_".join(
-                    [args.model_name, args.filtration_type, args.classifier]
-                )
-            ]
+        if args.model_name in [
+            "tsh",
+            "baseline_bjornsdottir_with_tsh",
+            "baseline_raatikainen_with_tsh",
+        ]:
             search_kind = "random"
-            pipeline = get_pipeline(
-                model_name=args.model_name, args=args, rng=rng
-            )
         elif args.model_name in [
             "baseline_bjornsdottir",
             "baseline_raatikainen",
         ]:
-            hyperparams = constants.hyperparams[
-                "_".join([args.model_name, args.classifier])
-            ]
             search_kind = "grid"
-            pipeline = get_pipeline(
-                model_name=args.model_name, args=args, rng=rng
-            )
-        elif args.model_name in [
-            "baseline_bjornsdottir_with_tsh",
-            "baseline_raatikainen_with_tsh_aggregated",
-        ]:
-            hyperparams = constants.hyperparams[
-                "_".join(
-                    [args.model_name, args.filtration_type, args.classifier]
-                )
-            ]
-            search_kind = "random"
-            pipeline = get_pipeline(
-                model_name=args.model_name, args=args, rng=rng
-            )
+        hyperparams = constants.hyperparams[args.model_name][args.level][
+            args.classifier
+        ]
+        pipeline = get_pipeline(model_name=args.model_name, args=args, rng=rng)
         # Get dataframe with data
-        df = get_dataframes.get_df(
+        df = get_data.get_df(
             model_name=args.model_name,
+            level=args.level,
             min_n_fixations=args.min_n_fixations,
             include_l2=not args.exclude_l2,
             verbose=bool(args.verbose),
@@ -553,6 +545,7 @@ def main() -> None:
         X, y, groups = get_data.get_X_y_groups(
             df=df,
             model_name=args.model_name,
+            level=args.level,
         )
         # Get indices of splits
         split_idxs = get_split_idxs(
