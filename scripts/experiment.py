@@ -670,8 +670,12 @@ def main() -> None:
             # Get accuracy
             test_accuracy = accuracy_score(y_test, y_pred)
             cv_results["accuracy"].append(test_accuracy)
-            # Retrieve best hyperparams
-            cv_results["best_params_list"].append(inner_search.best_params_)
+            # Retrieve best hyperparams (and make serializable)
+            best_params_serializable = {
+                k: (v.__name__ if callable(v) else v)
+                for k, v in inner_search.best_params_.items()
+            }
+            cv_results["best_params_list"].append(best_params_serializable)
         # Save CV results to disk
         cv_results_file_path.parent.mkdir(parents=True, exist_ok=True)
         with open(cv_results_file_path, "w") as f_out:
