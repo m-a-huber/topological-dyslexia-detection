@@ -6,8 +6,6 @@ from scipy.stats import loguniform
 from scripts.utils import (
     NestedDict,
     UniformSlopeSym,
-    weight_by_lifetime,
-    weight_constant,
 )
 
 # ============================================================================
@@ -227,10 +225,6 @@ hyperparams_tsh_trial_features = {
     "persistence_imager__base_estimator__bandwidth": loguniform(
         MIN_BANDWIDTH, MAX_BANDWIDTH
     ),
-    "persistence_imager__base_estimator__weight": [
-        weight_by_lifetime,
-        weight_constant,
-    ],
 }
 
 hyperparams_tsh_trial_svc = [
@@ -258,10 +252,6 @@ hyperparams_tsh_reader_features = {
     "persistence_imager__base_estimator__base_estimator__bandwidth": loguniform(
         MIN_BANDWIDTH, MAX_BANDWIDTH
     ),
-    "persistence_imager__base_estimator__base_estimator__weight": [
-        weight_by_lifetime,
-        weight_constant,
-    ],
 }
 
 hyperparams_tsh_reader_svc = [
@@ -289,10 +279,6 @@ hyperparams_baseline_bjornsdottir_with_tsh_trial_features = {
     "feature_union__tsh_features__persistence_imager__base_estimator__bandwidth": loguniform(
         MIN_BANDWIDTH, MAX_BANDWIDTH
     ),
-    "feature_union__tsh_features__persistence_imager__base_estimator__weight": [
-        weight_by_lifetime,
-        weight_constant,
-    ],
 }
 
 hyperparams["baseline_bjornsdottir_with_tsh"]["trial"]["rf"] = {
@@ -309,10 +295,6 @@ hyperparams_baseline_bjornsdottir_with_tsh_reader_features = {
     "feature_union__tsh_features__persistence_imager__base_estimator__base_estimator__bandwidth": loguniform(
         MIN_BANDWIDTH, MAX_BANDWIDTH
     ),
-    "feature_union__tsh_features__persistence_imager__base_estimator__base_estimator__weight": [
-        weight_by_lifetime,
-        weight_constant,
-    ],
 }
 
 hyperparams["baseline_bjornsdottir_with_tsh"]["reader"]["rf"] = {
@@ -329,10 +311,6 @@ hyperparams_baseline_raatikainen_with_tsh_trial_features = {
     "feature_union__tsh_features__persistence_imager__base_estimator__bandwidth": loguniform(
         MIN_BANDWIDTH, MAX_BANDWIDTH
     ),
-    "feature_union__tsh_features__persistence_imager__base_estimator__weight": [
-        weight_by_lifetime,
-        weight_constant,
-    ],
 }
 
 hyperparams["baseline_raatikainen_with_tsh"]["trial"]["rf"] = {
@@ -354,10 +332,6 @@ hyperparams_baseline_raatikainen_with_tsh_reader_features = {
     "feature_union__tsh_features__persistence_imager__base_estimator__base_estimator__bandwidth": loguniform(
         MIN_BANDWIDTH, MAX_BANDWIDTH
     ),
-    "feature_union__tsh_features__persistence_imager__base_estimator__base_estimator__weight": [
-        weight_by_lifetime,
-        weight_constant,
-    ],
 }
 
 hyperparams["baseline_raatikainen_with_tsh"]["reader"]["rf"] = {
