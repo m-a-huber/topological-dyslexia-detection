@@ -514,7 +514,7 @@ def main() -> None:
         outdir += "_without_l2"
     cv_results_file_path = get_cv_results_file_path(Path(outdir), args)
     experiment_name = cv_results_file_path.stem[11:]
-    tqdm.write(f" RUNNING MODEL '{experiment_name}' ".center(120, "*"))
+    tqdm.write(f" RUNNING MODEL '{experiment_name}' ".center(80, "*"))
     if not cv_results_file_path.exists() or args.overwrite:
         # Get pipeline and corresponding hyperparameter distributions
         if args.model_name in [
