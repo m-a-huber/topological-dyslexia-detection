@@ -9,7 +9,7 @@ verbose = 1
 seed = 42
 
 common_flag = (
-    f"--n-iter {n_iter} --n-jobs {n_jobs} --verbose {verbose} --seed {seed}"
+    f"--n-iter {n_iter} --n-jobs {n_jobs} --outdir outfiles --verbose {verbose} --seed {seed}"
 )
 
 flag_sets_baseline_bjornsdottir = tuple(  # 2 flag sets

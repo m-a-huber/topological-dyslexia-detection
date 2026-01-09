@@ -135,6 +135,12 @@ def parse_args():
         ),
     )
     parser.add_argument(
+        "--outdir",
+        type=str,
+        default="outfiles",
+        help="Directory to write results files to",
+    )
+    parser.add_argument(
         "--verbose",
         "-v",
         type=int,
@@ -509,7 +515,7 @@ def main() -> None:
     args = parse_args()
     process_args(model_name=args.model_name, args=args)
     rng = np.random.default_rng(seed=args.seed)
-    outdir = "outfiles"
+    outdir = args.outdir
     if args.exclude_l2:
         outdir += "_without_l2"
     cv_results_file_path = get_cv_results_file_path(Path(outdir), args)
