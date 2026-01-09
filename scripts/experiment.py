@@ -11,7 +11,6 @@ from sklearn.base import clone
 from sklearn.decomposition import PCA
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import (
-    accuracy_score,
     average_precision_score,
     precision_recall_curve,
     roc_auc_score,
@@ -575,7 +574,6 @@ def main() -> None:
             "roc_auc": [],
             "pr_curve": [],
             "pr_auc": [],
-            "accuracy": [],
             "best_params_list": [],
         }
         # Perform nested CV
@@ -650,8 +648,6 @@ def main() -> None:
                 .set_params(**best_params)
                 .fit(X_non_test, y_non_test)
             )
-            # Get predictions from best model on test data
-            y_pred = best_estimator.predict(X_test)
             # Use decision_function for SVC, predict_proba for RF
             if args.classifier == "svc":
                 y_pred_scores = best_estimator.decision_function(X_test)
@@ -673,9 +669,6 @@ def main() -> None:
             )
             test_pr_auc = average_precision_score(y_test, y_pred_scores)
             cv_results["pr_auc"].append(test_pr_auc)
-            # Get accuracy
-            test_accuracy = accuracy_score(y_test, y_pred)
-            cv_results["accuracy"].append(test_accuracy)
             # Retrieve best hyperparams (and make serializable)
             best_params_serializable = {
                 k: (v.__name__ if callable(v) else v)
@@ -704,11 +697,8 @@ def main() -> None:
     roc_auc_std = np.std(cv_results["roc_auc"])
     pr_auc_mean = np.mean(cv_results["pr_auc"])
     pr_auc_std = np.std(cv_results["pr_auc"])
-    accuracy_mean = np.mean(cv_results["accuracy"])
-    accuracy_std = np.std(cv_results["accuracy"])
     tqdm.write(f"ROC AUC  | {roc_auc_mean:.2f}\u00b1{roc_auc_std:.2f}")
     tqdm.write(f"PR AUC   | {pr_auc_mean:.2f}\u00b1{pr_auc_std:.2f}")
-    tqdm.write(f"Accuracy | {accuracy_mean:.2f}\u00b1{accuracy_std:.2f}")
     return
 
 
