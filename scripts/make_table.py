@@ -1,149 +1,195 @@
-import argparse
+# ruff: noqa: E501
 import json
 from pathlib import Path
 
 import numpy as np
 
 
-def parse_args():
-    def int_or_none(value):
-        if value.lower() == "none":
-            return None
-        try:
-            return int(value)
-        except ValueError:
-            raise argparse.ArgumentTypeError(
-                "Invalid value for seed; seed must be either an integer or "
-                f"None, but got '{value}' instead."
-            )
-
-    parser = argparse.ArgumentParser(
-        description="Generate LaTeX tables from experiment results"
-    )
-    parser.add_argument(
-        "--exclude-l2",
-        action="store_true",
-        help="Exclude CopCo-L2-readers",
-    )
-    parser.add_argument(
-        "--seed",
-        "-s",
-        type=int_or_none,
-        default=42,
-        help="Seed for reproducibility (int or None)",
-    )
-    return parser.parse_args()
+def mean_std(cv_file: Path) -> str:
+    try:
+        with open(cv_file, "r") as f:
+            data = json.load(f)
+        mean = np.mean(data["roc_auc"])
+        std = np.std(data["roc_auc"])
+        return rf"{mean:.2f}\pm {std:.2f}"
+    except FileNotFoundError:
+        return r"\text{---}"
 
 
-def load_roc_auc(filepath: Path) -> tuple[float, float] | None:
-    """Load ROC AUC results from JSON file. Returns (mean, std) or None if file
-    doesn't exist.
-    """
-    if not filepath.exists():
-        return None
-    with open(filepath, "r") as f:
-        data = json.load(f)
-    roc_auc = data["roc_auc"]
-    return np.mean(roc_auc), np.std(roc_auc)
-
-
-def format_result(result: tuple[float, float] | None) -> str:
-    """Format result as 'mean±std' or 'N/A' if None."""
-    if result is None:
-        return "N/A"
-    mean, std = result
-    return f"{mean:.2f}\\pm {std:.2f}"
-
-
-def make_tda_row(
-    tda_results: dict,
-    clf: str,
-    filtration: str,
+def get_tsh_line(
+    model_name: str,  # must be "tsh_<filtration_type>"
+    level: str,
+    outdirs: list[Path],
 ) -> str:
-    """Generate a LaTeX table row for a TDA model."""
-    clf_label = "SVC" if clf == "svc" else "RF"
-    ord_result = format_result(tda_results[filtration, "ordinary", clf])
-    ext_result = format_result(tda_results[filtration, "extended", clf])
+    filtration_type = model_name.split("_")[1]
+    cv_files = (
+        outdir
+        / f"cv_results_tsh_{level}_level_{filtration_type}_{persistence_type}_svc_seed_42.json"
+        for outdir in outdirs
+        for persistence_type in ["ordinary", "extended"]
+    )
+    model_name_pretty = rf"TSH\textsubscript{{{filtration_type}}}"
+    numbers = [mean_std(cv_file) for cv_file in cv_files]
     return (
-        f"    TDA-{clf_label}\\textsubscript{{{filtration}}} & {ord_result} & "
-        f"{ext_result} \\\\"
+        rf"& {model_name_pretty} "
+        + " ".join([rf"& {s}" for s in numbers])
+        + r" \\"
     )
 
 
-def make_baseline_row(label: str, result: tuple[float, float] | None) -> str:
-    """Generate a LaTeX table row for a baseline model."""
-    formatted = format_result(result)
+def get_baseline_line(
+    model_name: str,  # must be "baseline_<name>_<classifier>"
+    level: str,
+    outdirs: list[Path],
+) -> str:
+    name, classifier = model_name.split("_")[1:]
+    cv_files = (
+        outdir
+        / f"cv_results_baseline_{name}_{level}_level_{classifier}_seed_42.json"
+        for outdir in outdirs
+    )
+    if name == "bjornsdottir":
+        model_name_pretty = r"BL\textsubscript{Bjö}"
+    elif name == "raatikainen":
+        if classifier == "rf":
+            model_name_pretty = r"BL\textsubscript{Raa-RF}"
+        elif classifier == "svc":
+            model_name_pretty = r"BL\textsubscript{Raa-SVC}"
+    numbers = [mean_std(cv_file) for cv_file in cv_files]
     return (
-        f"    Baseline\\textsubscript{{{label}}} & "
-        f"\\multicolumn{{2}}{{C}}{{{formatted}}} \\\\"
+        rf"& {model_name_pretty} "
+        + " ".join([rf"& \multicolumn{{2}}{{C}}{{{s}}}" for s in numbers])
+        + r" \\"
     )
 
 
-def main(
-    args: argparse.Namespace,
-) -> None:
-    # Determine output directory
-    outdir = Path("outfiles_without_l2" if args.exclude_l2 else "outfiles")
-    seed = args.seed
-    # Load results for TDA models
-    filtration_types = ["horizontal", "sloped", "sigmoid", "arctan"]
-    persistence_types = ["ordinary", "extended"]
-    classifiers = ["svc", "rf"]
-    tda_results = {}
-    for filtration_type in filtration_types:
-        for persistence_type in persistence_types:
-            for clf in classifiers:
-                filepath = outdir / (
-                    f"cv_results_tsh_{filtration_type}_{persistence_type}_{clf}_seed_{seed}.json"
-                )
-                tda_results[filtration_type, persistence_type, clf] = (
-                    load_roc_auc(filepath)
-                )
-    # Load Björnsdottir baseline result
-    bjornsdottir_result = load_roc_auc(
-        outdir / f"cv_results_baseline_bjornsdottir_rf_seed_{seed}.json"
-    )
-    # Load Raatikainen baseline results
-    raatikainen_svc_result = load_roc_auc(
-        outdir / f"cv_results_baseline_raatikainen_svc_seed_{seed}.json"
-    )
-    raatikainen_rf_result = load_roc_auc(
-        outdir / f"cv_results_baseline_raatikainen_rf_seed_{seed}.json"
-    )
-    # Build TDA rows
-    tda_rows = [
-        make_tda_row(tda_results, clf, filtration_type)
-        for clf in classifiers
-        for filtration_type in filtration_types
+def get_baseline_with_tsh_line(
+    model_name: str,  # must be "baseline_<name>_<classifier>_with_tsh_<filtration_type>"
+    level: str,
+    outdirs: list[Path],
+) -> str:
+    baseline_name, classifier, _, _, filtration_type = model_name.split("_")[
+        1:
     ]
-    # Generate table
-    l2_status = "excluding" if args.exclude_l2 else "including"
-    label_suffix = "without_l2" if args.exclude_l2 else "with_l2"
-    tda_rows_str = "\n".join(tda_rows)
-    baseline_bjo = make_baseline_row("Bjö", bjornsdottir_result)
-    baseline_raa_svc = make_baseline_row("Raa-SVC", raatikainen_svc_result)
-    baseline_raa_rf = make_baseline_row("Raa-RF", raatikainen_rf_result)
-    table_content = f"""\\begin{{table}}
-  \\caption{{Evaluation results on CopCo Dataset {l2_status} L2-readers}}
-  \\label{{table:results_copco_{label_suffix}}}
-  \\centering
-  \\begin{{tabular}}{{lCC}}
-    \\toprule
-    Filtration type & \\multicolumn{{2}}{{c}}{{Mean ROC AUC score}} \\\\
-    \\midrule
-    & \\text{{Ordinary persistence}} & \\text{{Extended persistence}} \\\\
-    \\cmidrule(r){{2-3}}
-{tda_rows_str}
-    \\cmidrule(r){{2-3}}
-{baseline_bjo}
-{baseline_raa_svc}
-{baseline_raa_rf}
-    \\bottomrule
-  \\end{{tabular}}
-\\end{{table}}"""
-    print(table_content)
+    cv_files = (
+        outdir
+        / f"cv_results_baseline_{baseline_name}_with_tsh_{level}_level_{filtration_type}_{persistence_type}_{classifier}_seed_42.json"
+        for outdir in outdirs
+        for persistence_type in ["ordinary", "extended"]
+    )
+    if baseline_name == "bjornsdottir":
+        model_name_pretty = (
+            rf"BL\textsubscript{{Bjö}}+TSH\textsubscript{{{filtration_type}}}"
+        )
+    elif baseline_name == "raatikainen":
+        if classifier == "rf":
+            model_name_pretty = rf"BL\textsubscript{{Raa-RF}}+TSH\textsubscript{{{filtration_type}}}"
+        elif classifier == "svc":
+            model_name_pretty = rf"BL\textsubscript{{Raa-SVC}}+TSH\textsubscript{{{filtration_type}}}"
+    numbers = [mean_std(cv_file) for cv_file in cv_files]
+    return (
+        rf"& {model_name_pretty} "
+        + " ".join([rf"& {s}" for s in numbers])
+        + r" \\"
+    )
+
+
+header = r"""\begin{table}[ht]
+\caption{Mean ROC AUC scores by model and aggreagation level}
+\centering
+\label{table:results}
+\begin{tabular}{clCCCC}
+\toprule
+&  & \multicolumn{4}{c}{Mean ROC AUC score}\\
+\cmidrule(lr){3-6}
+& Model name
+& \multicolumn{2}{c}{Including L2}
+& \multicolumn{2}{c}{Excluding L2}\\
+\cmidrule(lr){3-4}\cmidrule(lr){5-6}
+&  & \text{Ordinary persistence} & \text{Extended persistence} & \text{Ordinary persistence} & \text{Extended persistence}\\
+\midrule
+\multirow{19}{*}{\rotatebox{90}{TRIAL-LEVEL}}"""
+
+footer = r"""\bottomrule
+\end{tabular}
+\end{table}"""
+
+
+def main(outdirs: list[Path]) -> None:
+    model_names_tsh = [
+        "tsh_horizontal",
+        "tsh_sloped",
+        "tsh_sigmoid",
+        "tsh_arctan",
+    ]
+    model_names_baseline = [
+        "baseline_bjornsdottir_rf",
+        "baseline_raatikainen_rf",
+        "baseline_raatikainen_svc",
+    ]
+    model_names_baseline_with_tsh = [
+        "baseline_bjornsdottir_rf_with_tsh_horizontal",
+        "baseline_bjornsdottir_rf_with_tsh_sloped",
+        "baseline_bjornsdottir_rf_with_tsh_sigmoid",
+        "baseline_bjornsdottir_rf_with_tsh_arctan",
+        "baseline_raatikainen_rf_with_tsh_horizontal",
+        "baseline_raatikainen_rf_with_tsh_sloped",
+        "baseline_raatikainen_rf_with_tsh_sigmoid",
+        "baseline_raatikainen_rf_with_tsh_arctan",
+        "baseline_raatikainen_svc_with_tsh_horizontal",
+        "baseline_raatikainen_svc_with_tsh_sloped",
+        "baseline_raatikainen_svc_with_tsh_sigmoid",
+        "baseline_raatikainen_svc_with_tsh_arctan",
+    ]
+    tex_table_list = [header]
+    tex_table_list.extend(
+        [
+            get_tsh_line(model_name, "trial", outdirs)
+            for model_name in model_names_tsh
+        ]
+    )
+    tex_table_list.append(r"\cmidrule(lr){2-6}")
+    tex_table_list.extend(
+        [
+            get_baseline_line(model_name, "trial", outdirs)
+            for model_name in model_names_baseline
+        ]
+    )
+    tex_table_list.append(r"\cmidrule(lr){2-6}")
+    tex_table_list.extend(
+        [
+            get_baseline_with_tsh_line(model_name, "trial", outdirs)
+            for model_name in model_names_baseline_with_tsh
+        ]
+    )
+    tex_table_list.extend([r"\midrule", r"\multirow{19}{*}{\rotatebox{90}{READER-LEVEL}}"])
+    tex_table_list.extend(
+        [
+            get_tsh_line(model_name, "reader", outdirs)
+            for model_name in model_names_tsh
+        ]
+    )
+    tex_table_list.append(r"\cmidrule(lr){2-6}")
+    tex_table_list.extend(
+        [
+            get_baseline_line(model_name, "reader", outdirs)
+            for model_name in model_names_baseline
+        ]
+    )
+    tex_table_list.append(r"\cmidrule(lr){2-6}")
+    tex_table_list.extend(
+        [
+            get_baseline_with_tsh_line(model_name, "reader", outdirs)
+            for model_name in model_names_baseline_with_tsh
+        ]
+    )
+    tex_table_list.append(footer)
+    tex_table = "\n".join(tex_table_list)
+    print(tex_table)
+    return
 
 
 if __name__ == "__main__":
-    args = parse_args()
-    raise SystemExit(main(args))
+    outdirs = [Path("outfiles"), Path("outfiles_without_l2")]
+    # outdirs = [Path("outfiles_both_weights"), Path("outfiles_both_weights_without_l2")]
+    main(outdirs)
