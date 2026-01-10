@@ -7,6 +7,20 @@ from sklearn.base import (  # type: ignore
 )
 
 
+def weight_by_lifetime(pt):
+    """Weight function for persistence images that weighs points in a
+    persistence diagram by their lifetime.
+    """
+    return np.abs(pt[1])
+
+
+def weight_constant(pt):  # noqa: ARG001
+    """Weight function for persistence images that weighs points in a
+    persistence diagram by 1.
+    """
+    return 1
+
+
 def group_by_mean(X, groups):
     """Groups the rows of X according to the corresponding group in groups and
     returns the mean of each group as rows in a 2D array.
