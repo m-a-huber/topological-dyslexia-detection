@@ -4,6 +4,12 @@ from pathlib import Path
 
 import numpy as np
 
+# Outdirs containing CV-result files
+OUTDIRS = [
+    Path("outfiles"),
+    Path("outfiles_without_l2"),
+]
+
 
 def mean_std(cv_file: Path) -> str:
     try:
@@ -115,7 +121,9 @@ footer = r"""\bottomrule
 \end{table}"""
 
 
-def main(outdirs: list[Path]) -> None:
+def main(
+    outdirs: list[Path],
+) -> None:
     model_names_tsh = [
         "tsh_horizontal",
         "tsh_sloped",
@@ -162,7 +170,9 @@ def main(outdirs: list[Path]) -> None:
             for model_name in model_names_baseline_with_tsh
         ]
     )
-    tex_table_list.extend([r"\midrule", r"\multirow{19}{*}{\rotatebox{90}{READER-LEVEL}}"])
+    tex_table_list.extend(
+        [r"\midrule", r"\multirow{19}{*}{\rotatebox{90}{READER-LEVEL}}"]
+    )
     tex_table_list.extend(
         [
             get_tsh_line(model_name, "reader", outdirs)
@@ -190,6 +200,4 @@ def main(outdirs: list[Path]) -> None:
 
 
 if __name__ == "__main__":
-    outdirs = [Path("outfiles"), Path("outfiles_without_l2")]
-    # outdirs = [Path("outfiles_both_weights"), Path("outfiles_both_weights_without_l2")]
-    main(outdirs)
+    main(OUTDIRS)
