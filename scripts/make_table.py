@@ -4,6 +4,8 @@ from pathlib import Path
 
 import numpy as np
 
+# Metric to compute ("roc_auc" or "pr_auc")
+METRIC = "roc_auc"
 # Outdirs containing CV-result files
 OUTDIRS = [
     Path("outfiles"),
@@ -15,8 +17,8 @@ def mean_std(cv_file: Path) -> str:
     try:
         with open(cv_file, "r") as f:
             data = json.load(f)
-        mean = np.mean(data["roc_auc"])
-        std = np.std(data["roc_auc"])
+        mean = np.mean(data[METRIC])
+        std = np.std(data[METRIC])
         return rf"{mean:.2f}\pm {std:.2f}"
     except FileNotFoundError:
         return r"\text{---}"
@@ -100,21 +102,21 @@ def get_baseline_with_tsh_line(
     )
 
 
-header = r"""\begin{table}[ht]
-\caption{Mean ROC AUC scores by model and aggreagation level}
+header = rf"""\begin{{table}}[ht]
+\caption{{Mean {METRIC.upper().replace("_", " ")} scores by model and aggreagation level}}
 \centering
-\label{table:results}
-\begin{tabular}{clCCCC}
+\label{{table:results_{METRIC}}}
+\begin{{tabular}}{{clCCCC}}
 \toprule
-&  & \multicolumn{4}{c}{Mean ROC AUC score}\\
-\cmidrule(lr){3-6}
+&  & \multicolumn{{4}}{{c}}{{Mean {METRIC.upper().replace("_", " ")} score}}\\
+\cmidrule(lr){{3-6}}
 & Model name
-& \multicolumn{2}{c}{Including L2}
-& \multicolumn{2}{c}{Excluding L2}\\
-\cmidrule(lr){3-4}\cmidrule(lr){5-6}
-&  & \text{Ordinary persistence} & \text{Extended persistence} & \text{Ordinary persistence} & \text{Extended persistence}\\
+& \multicolumn{{2}}{{c}}{{Including L2}}
+& \multicolumn{{2}}{{c}}{{Excluding L2}}\\
+\cmidrule(lr){{3-4}}\cmidrule(lr){{5-6}}
+&  & \text{{Ord. persistence}} & \text{{Ext. persistence}} & \text{{Ord. persistence}} & \text{{Ext. persistence}}\\
 \midrule
-\multirow{19}{*}{\rotatebox{90}{TRIAL-LEVEL}}"""
+\multirow{{19}}{{*}}{{\rotatebox{{90}}{{TRIAL-LEVEL}}}}"""
 
 footer = r"""\bottomrule
 \end{tabular}
