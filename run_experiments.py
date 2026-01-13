@@ -67,7 +67,7 @@ flag_sets_baseline_raatikainen_with_tsh_extended = tuple(  # 16 flag sets
 )
 
 # Run experiments including L2-readers
-for flag_set in (  # 86 flag sets
+for flag_set in (  # 70 flag sets
     flag_sets_baseline_bjornsdottir
     + flag_sets_baseline_raatikainen
     + flag_sets_tsh_ordinary
@@ -83,7 +83,7 @@ for flag_set in (  # 86 flag sets
     )
 
 # Run experiments excluding L2-readers
-for flag_set in (  # 86 flag sets
+for flag_set in (  # 70 flag sets
     flag_sets_baseline_bjornsdottir
     + flag_sets_baseline_raatikainen
     + flag_sets_tsh_ordinary
