@@ -249,6 +249,11 @@ def get_df(
                 "landing_position",
             )
             df_all = df_all.with_columns(pl.col("READER_ID").cast(pl.Int64))
+            # Drop samples containing too few fixations
+            if min_n_fixations > 1:
+                df_all = df_all.filter(
+                    pl.count("SAMPLE_ID").over("SAMPLE_ID") >= min_n_fixations
+                )
             # Create aggregated reading measures
             aggs = []
             if level == "trial":
@@ -341,6 +346,11 @@ def get_df(
                 df_subject = df_subject.filter(pl.col("TRIAL_ID") > 10)
                 subject_dfs.append(df_subject)
             df_all = pl.concat(subject_dfs)
+            # Drop samples containing too few fixations
+            if min_n_fixations > 1:
+                df_all = df_all.filter(
+                    pl.count("SAMPLE_ID").over("SAMPLE_ID") >= min_n_fixations
+                )
             if level == "trial":
                 groups = ["READER_ID", "LABEL", "TRIAL_ID", "SAMPLE_ID"]
             elif level == "reader":
