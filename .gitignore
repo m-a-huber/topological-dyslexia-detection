@@ -1,12 +1,10 @@
 __pycache__/
-.venv
-.vscode
+.venv/
+
 data_*/
 dataframes*/
 logs*/
-notes/
 outfiles*/
-trash
+
 *.ipynb
-*.md
-!README.md
+*.sh
