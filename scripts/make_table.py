@@ -154,22 +154,20 @@ def main(
     tex_table_list = [header]
     tex_table_list.extend(
         [
-            get_tsh_line(model_name, "trial", outdirs)
-            for model_name in model_names_tsh
+            get_baseline_with_tsh_line(model_name, "trial", outdirs)
+            for model_name in model_names_baseline_with_tsh
         ]
     )
-    tex_table_list.append(r"\cmidrule(lr){2-6}")
     tex_table_list.extend(
         [
             get_baseline_line(model_name, "trial", outdirs)
             for model_name in model_names_baseline
         ]
     )
-    tex_table_list.append(r"\cmidrule(lr){2-6}")
     tex_table_list.extend(
         [
-            get_baseline_with_tsh_line(model_name, "trial", outdirs)
-            for model_name in model_names_baseline_with_tsh
+            get_tsh_line(model_name, "trial", outdirs)
+            for model_name in model_names_tsh
         ]
     )
     tex_table_list.extend(
@@ -177,22 +175,20 @@ def main(
     )
     tex_table_list.extend(
         [
-            get_tsh_line(model_name, "reader", outdirs)
-            for model_name in model_names_tsh
+            get_baseline_with_tsh_line(model_name, "reader", outdirs)
+            for model_name in model_names_baseline_with_tsh
         ]
     )
-    tex_table_list.append(r"\cmidrule(lr){2-6}")
     tex_table_list.extend(
         [
             get_baseline_line(model_name, "reader", outdirs)
             for model_name in model_names_baseline
         ]
     )
-    tex_table_list.append(r"\cmidrule(lr){2-6}")
     tex_table_list.extend(
         [
-            get_baseline_with_tsh_line(model_name, "reader", outdirs)
-            for model_name in model_names_baseline_with_tsh
+            get_tsh_line(model_name, "reader", outdirs)
+            for model_name in model_names_tsh
         ]
     )
     tex_table_list.append(footer)
